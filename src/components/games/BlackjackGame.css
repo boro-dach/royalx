@@ -1,0 +1,410 @@
+/* Blackjack Screen Styles */
+.bj-screen {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 420px;
+  height: 100vh;
+  height: 100dvh;
+  background-color: #07090e;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", -apple-system, sans-serif;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Header */
+.bj-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  min-height: 52px;
+  background-color: #07090e;
+  flex-shrink: 0;
+}
+
+.bj-back-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.bj-balance-text {
+  font-size: 16px;
+  font-weight: 700;
+  color: #00e699;
+  letter-spacing: 0.3px;
+}
+
+/* Luxury Dark Felt Table (Matching Crash & Mines Minimalist Aesthetic) */
+.bj-felt-container {
+  margin: 0 12px;
+  flex: 1;
+  min-height: 0;
+  background: radial-gradient(ellipse at 50% 45%, #0d1612 0%, #090e0c 65%, #040705 100%);
+  border: 1px solid rgba(0, 230, 153, 0.18);
+  border-radius: 24px;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px 14px 18px 14px;
+  overflow: hidden;
+}
+
+/* Felt Arc Line & Text */
+.bj-felt-arc-container {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  pointer-events: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 0.75;
+}
+
+.bj-felt-arc-svg {
+  width: 100%;
+  height: 90px;
+  overflow: visible;
+}
+
+/* Dealer & Player Zones */
+.bj-dealer-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 5;
+}
+
+.bj-player-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 5;
+}
+
+.bj-zone-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+
+.bj-zone-label {
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.6px;
+  color: #768196;
+  text-transform: uppercase;
+}
+
+.bj-score-pill {
+  background: #111422;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 13px;
+  font-weight: 850;
+  color: #ffffff;
+  min-width: 24px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Playing Cards */
+.bj-cards-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 8px;
+  min-height: 94px;
+}
+
+.bj-card {
+  width: 65px;
+  height: 92px;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.45);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 4px 6px;
+  box-sizing: border-box;
+  animation: cardSlideIn 0.22s ease-out;
+  transition: transform 0.15s ease;
+}
+
+.bj-card-overlap {
+  margin-left: -22px;
+}
+
+.bj-card-corner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+
+.bj-card-corner.bottom-right {
+  transform: rotate(180deg);
+}
+
+.bj-card-rank {
+  font-size: 14px;
+  font-weight: 800;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+}
+
+.bj-card-suit {
+  font-size: 11px;
+  margin-top: 1px;
+}
+
+.bj-card-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bj-card-center-suit {
+  font-size: 26px;
+  line-height: 1;
+}
+
+/* Face-down Card */
+.bj-card-back {
+  background: linear-gradient(135deg, #181d2c 0%, #0d101a 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+}
+
+.bj-card-back-pattern {
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  border: 1px dashed rgba(0, 230, 153, 0.4);
+  background: radial-gradient(circle, rgba(0, 230, 153, 0.1) 0%, transparent 70%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bj-card-back-icon {
+  font-size: 20px;
+  color: #00e699;
+  opacity: 0.8;
+}
+
+/* Center Result Card */
+.bj-result-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(18, 20, 29, 0.95);
+  border-radius: 18px;
+  padding: 14px 28px;
+  text-align: center;
+  z-index: 20;
+  min-width: 220px;
+  background: rgba(13, 16, 26, 0.95);
+  backdrop-filter: blur(12px);
+  animation: resultPop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.bj-result-card.dealer-won {
+  border: 1px solid rgba(255, 77, 109, 0.5);
+  box-shadow: 0 0 28px rgba(255, 77, 109, 0.35);
+}
+
+.bj-result-card.player-won {
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  box-shadow: 0 0 28px rgba(34, 197, 94, 0.35);
+}
+
+.bj-result-card.push {
+  border: 1px solid rgba(255, 184, 0, 0.5);
+  box-shadow: 0 0 28px rgba(255, 184, 0, 0.35);
+}
+
+.bj-result-title {
+  font-size: 15px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.bj-result-card.dealer-won .bj-result-title {
+  color: #ff4d6d;
+}
+
+.bj-result-card.player-won .bj-result-title {
+  color: #22c55e;
+}
+
+.bj-result-card.push .bj-result-title {
+  color: #ffb800;
+}
+
+.bj-result-sub {
+  font-size: 13px;
+  color: #8e98a8;
+  margin-top: 4px;
+  font-weight: 600;
+}
+
+/* Bottom Betting Container */
+.bj-betting-container {
+  padding: 12px 14px 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: #07090e;
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Bottom Action Buttons */
+.bj-actions-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+
+/* In-game action buttons */
+.bj-btn-stand {
+  flex: 1;
+  height: 52px;
+  background-color: #ef4444;
+  border: none;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  letter-spacing: -0.2px;
+}
+
+.bj-btn-stand:hover:not(:disabled) {
+  background-color: #dc2626;
+}
+
+.bj-btn-stand:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.bj-btn-double {
+  flex: 1;
+  height: 52px;
+  background-color: #8b5cf6;
+  border: none;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.35);
+  transition: background-color 0.15s ease, transform 0.1s ease;
+  letter-spacing: -0.2px;
+}
+
+.bj-btn-double:hover:not(:disabled) {
+  background-color: #7c3aed;
+}
+
+.bj-btn-double:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.bj-btn-hit {
+  flex: 1.25;
+  height: 52px;
+  background: #00e699;
+  border: none;
+  color: #05140d;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 14px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(0, 230, 153, 0.45);
+  transition: transform 0.1s ease, background 0.15s ease;
+  font-family: inherit;
+  letter-spacing: -0.2px;
+}
+
+.bj-btn-hit:hover:not(:disabled) {
+  background: #00cc88;
+}
+
+.bj-btn-hit:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.bj-btn-stand:disabled, .bj-btn-double:disabled, .bj-btn-hit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Animations */
+@keyframes cardSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes resultPop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}

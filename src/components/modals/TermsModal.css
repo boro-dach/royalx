@@ -1,0 +1,241 @@
+/* ===================================================
+   MINIMALIST ROYAL X TERMS MODAL (AESTHETIC & NON-BOLD)
+   Styling harmonized with Mines "Сделать ставку"
+   =================================================== */
+
+.terms-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 6, 10, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  animation: termsFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes termsFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.terms-modal-card {
+  width: 100%;
+  max-width: 390px;
+  background: #11141c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.85);
+  border-radius: 20px;
+  padding: 22px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #ffffff;
+  font-family: inherit;
+}
+
+/* Header */
+.terms-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.terms-brand {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: #727988;
+  text-transform: uppercase;
+}
+
+.terms-brand span {
+  color: var(--accent-cyan, #00e699);
+}
+
+.terms-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.2px;
+}
+
+.terms-subtitle {
+  font-size: 12px;
+  font-weight: 450;
+  color: #828998;
+  margin: 0;
+  line-height: 1.45;
+  letter-spacing: -0.1px;
+  max-width: 300px;
+}
+
+/* Quick Select Bar */
+.terms-quick-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 2px 0 2px;
+}
+
+.terms-quick-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  color: #6a7180;
+}
+
+.terms-quick-btn {
+  background: rgba(0, 230, 153, 0.08);
+  border: 1px solid rgba(0, 230, 153, 0.18);
+  color: var(--accent-cyan, #00e699);
+  font-size: 11px;
+  font-weight: 550;
+  letter-spacing: -0.1px;
+  cursor: pointer;
+  padding: 3px 10px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.terms-quick-btn:hover {
+  background: rgba(0, 230, 153, 0.16);
+}
+
+/* Document Rows - Perfectly Symmetrical, Level & Non-Bold */
+.terms-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.terms-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  padding: 12px 14px;
+  min-height: 50px;
+  box-sizing: border-box;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+.terms-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.terms-row.active {
+  background: rgba(0, 230, 153, 0.05);
+  border-color: rgba(0, 230, 153, 0.35);
+}
+
+/* Checkbox - Fixed Square */
+.terms-checkbox {
+  width: 19px;
+  height: 19px;
+  border-radius: 6px;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  color: #05140d;
+}
+
+.terms-row.active .terms-checkbox {
+  border-color: var(--accent-cyan, #00e699);
+  background: var(--accent-cyan, #00e699);
+}
+
+/* Document Title - Aesthetic, Light and Clear */
+.terms-row-title {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #eaecf1;
+  line-height: 1.35;
+  letter-spacing: -0.15px;
+  text-align: left;
+}
+
+/* Link Button */
+.terms-link {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--accent-cyan, #00e699);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: -0.1px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+
+.terms-link:hover {
+  background: rgba(0, 230, 153, 0.14);
+  border-color: var(--accent-cyan, #00e699);
+}
+
+/* Action Button - Exact Same Aesthetics as Mines "Сделать ставку" */
+.terms-btn {
+  width: 100%;
+  height: 52px;
+  background: #00e699;
+  border: none;
+  border-radius: 14px;
+  color: #05140d;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.12s ease, transform 0.1s ease, background 0.15s ease;
+  font-family: inherit;
+  margin-top: 4px;
+}
+
+.terms-btn:hover:not(:disabled) {
+  background: #00cc88;
+}
+
+.terms-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.terms-btn.disabled {
+  background: #141720;
+  color: #61697c;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: not-allowed;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: none;
+  transform: none;
+}
