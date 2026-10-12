@@ -1,6 +1,6 @@
 // Application-wide configuration derived from environment variables
 export const APP_CONFIG = {
-  botUsername: import.meta.env.VITE_BOT_USERNAME || 'RoyalX_Bot',
+  botUsername: import.meta.env.VITE_BOT_USERNAME || 'RXcasbot',
   channelUsername: import.meta.env.VITE_CHANNEL_USERNAME || 'RXgambling',
   channelUrl: import.meta.env.VITE_CHANNEL_URL || 'https://t.me/RXgambling',
   supportUsername: import.meta.env.VITE_SUPPORT_USERNAME || 'MartinCartier',

@@ -67,7 +67,7 @@ async function runApiTests() {
   // Test 1b: GET /api/config (Public environment config)
   const configRes = await request(app, 'GET', '/api/config');
   assert.strictEqual(configRes.status, 200, 'Config endpoint should return 200');
-  assert.strictEqual(configRes.body.botUsername, process.env.BOT_USERNAME || 'RoyalX_Bot');
+  assert.strictEqual(configRes.body.botUsername, process.env.BOT_USERNAME || 'RXcasbot');
   assert.strictEqual(configRes.body.channelUsername, process.env.CHANNEL_USERNAME || 'RXgambling');
   assert(configRes.body.termsUrl && configRes.body.rulesUrl && configRes.body.privacyUrl, 'Legal URLs must be populated');
   assert(configRes.body.superAdminId, 'superAdminId must be present');
