@@ -375,8 +375,10 @@ const DEFAULT_ADMINS = (process.env.ADMIN_IDS
 const DEFAULT_TRC20 = process.env.TRC20_WALLET || 'TYDzsYUEpvnYmQk4zGP9sWWcTEd36d53dB';
 const DEFAULT_TON = process.env.TON_WALLET || 'UQCq7UgQ1bhs9pI8dw5juHB1cYwo1wgcQ0zxqd8eCRktwGVD';
 const SUPPORT_USERNAME = process.env.SUPPORT_USERNAME || 'MartinCartier';
-const CHANNEL_USERNAME = (process.env.CHANNEL_USERNAME || 'RXgambling').replace(/^@/, '');
-const BOT_USERNAME = (process.env.BOT_USERNAME || 'RXcasbot').replace(/^@/, '');
+const rawChannel = (process.env.CHANNEL_USERNAME || 'RXgambling').replace(/^@/, '');
+const CHANNEL_USERNAME = (!rawChannel || rawChannel === 'RoyalX_Win') ? 'RXgambling' : rawChannel;
+const rawBot = (process.env.BOT_USERNAME || 'RXcasbot').replace(/^@/, '');
+const BOT_USERNAME = (!rawBot || rawBot === 'RoyalX_Bot') ? 'RXcasbot' : rawBot;
 const CHANNEL_URL = process.env.CHANNEL_URL || `https://t.me/${CHANNEL_USERNAME}`;
 const CHANNEL_CHAT_ID = process.env.CHANNEL_CHAT_ID || `@${CHANNEL_USERNAME}`;
 const SUPPORT_URL = process.env.SUPPORT_URL || `https://t.me/${SUPPORT_USERNAME}`;

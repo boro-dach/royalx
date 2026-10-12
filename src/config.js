@@ -1,8 +1,14 @@
 // Application-wide configuration derived from environment variables
+const rawBot = (import.meta.env.VITE_BOT_USERNAME || 'RXcasbot').replace(/^@/, '');
+const cleanBot = (!rawBot || rawBot === 'RoyalX_Bot') ? 'RXcasbot' : rawBot;
+
+const rawChannel = (import.meta.env.VITE_CHANNEL_USERNAME || 'RXgambling').replace(/^@/, '');
+const cleanChannel = (!rawChannel || rawChannel === 'RoyalX_Win') ? 'RXgambling' : rawChannel;
+
 export const APP_CONFIG = {
-  botUsername: import.meta.env.VITE_BOT_USERNAME || 'RXcasbot',
-  channelUsername: import.meta.env.VITE_CHANNEL_USERNAME || 'RXgambling',
-  channelUrl: import.meta.env.VITE_CHANNEL_URL || 'https://t.me/RXgambling',
+  botUsername: cleanBot,
+  channelUsername: cleanChannel,
+  channelUrl: (import.meta.env.VITE_CHANNEL_URL || `https://t.me/${cleanChannel}`).replace('RoyalX_Win', 'RXgambling'),
   supportUsername: import.meta.env.VITE_SUPPORT_USERNAME || 'MartinCartier',
   supportUrl: import.meta.env.VITE_SUPPORT_URL || 'https://t.me/MartinCartier',
   termsUrl: import.meta.env.VITE_TERMS_URL || 'https://telegra.ph/POLZOVATELSKOE-SOGLASHENIE-ROYAL-X-09-18',

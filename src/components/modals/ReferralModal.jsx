@@ -5,7 +5,8 @@ import { CloseIcon, TetherIcon } from '../common/Icons';
 
 export default function ReferralModal() {
   const { closeModal, isClosingModal, tgUser, showToast, referralStats } = useApp();
-  const refLink = `https://t.me/${APP_CONFIG.botUsername}?start=ref_${tgUser.id || '3982051'}`;
+  const botName = (APP_CONFIG.botUsername && APP_CONFIG.botUsername !== 'RoyalX_Bot') ? APP_CONFIG.botUsername : 'RXcasbot';
+  const refLink = `https://t.me/${botName}?start=ref_${tgUser.id || '3982051'}`;
 
   const handleCopy = () => {
     navigator.clipboard?.writeText(refLink);
