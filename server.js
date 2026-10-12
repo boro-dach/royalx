@@ -56,30 +56,35 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve dist directory built by Vite with strict no-cache headers
+// Serve dist directory built by Vite with strict CORS and caching headers
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath, {
     index: false,
     setHeaders: (res, filePath) => {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
-      res.setHeader('Pragma', 'no-cache');
-      res.setHeader('Expires', '0');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
     }
   }));
+
+  // Never return index.html for missing assets/images - return 404 so browsers don't fail with MIME type error
+  app.get('/assets/*', (req, res) => {
+    res.status(404).send('Asset not found');
+  });
+
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    try {
-      let html = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
-      const bust = Date.now();
-      html = html.replace(/\/assets\/([^"'\s>]+\.js)/g, `/assets/$1?v=${bust}`);
-      html = html.replace(/\/assets\/([^"'\s>]+\.css)/g, `/assets/$1?v=${bust}`);
-      return res.send(html);
-    } catch (e) {
-      return res.sendFile(path.join(distPath, 'index.html'));
-    }
+    return res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
   app.get('*', (req, res, next) => {
