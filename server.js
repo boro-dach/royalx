@@ -3,7 +3,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import TelegramBot from 'node-telegram-bot-api';
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import fs from 'fs';
 import { verifyInitData, hashPassword, verifyPassword, createSession, validateSession, destroySession, authMiddleware, adminMiddleware } from './auth.js';
 import { getSupabaseClient, isSupabaseConfigured, toSnakeCase, toCamelCase } from './supabaseClient.js';
@@ -12,6 +12,18 @@ dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Ensure dist directory exists (automatically build if missing on Railway/Cloud)
+const distPath = path.join(__dirname, 'dist');
+if (!fs.existsSync(distPath) || !fs.existsSync(path.join(distPath, 'index.html'))) {
+  console.log('[Server] ⚠️ dist/ directory not found or incomplete. Building frontend with Vite...');
+  try {
+    execSync('npm run build', { stdio: 'inherit' });
+    console.log('[Server] ✅ Vite build completed successfully!');
+  } catch (err) {
+    console.error('[Server] ❌ Vite build failed:', err.message);
+  }
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -45,7 +57,6 @@ app.use((req, res, next) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve dist directory built by Vite with strict no-cache headers
-const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath, {
     index: false,
@@ -60,8 +71,6 @@ if (fs.existsSync(distPath)) {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    res.setHeader('Surrogate-Control', 'no-store');
-    res.setHeader('Clear-Site-Data', '"cache"');
     try {
       let html = fs.readFileSync(path.join(distPath, 'index.html'), 'utf8');
       const bust = Date.now();
@@ -71,6 +80,22 @@ if (fs.existsSync(distPath)) {
     } catch (e) {
       return res.sendFile(path.join(distPath, 'index.html'));
     }
+  });
+} else {
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.status(503).send(`
+      <!DOCTYPE html>
+      <html>
+        <head><meta charset="utf-8"><title>RoyalX — Building...</title></head>
+        <body style="background:#0b0e14;color:#00e699;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;">
+          <div>
+            <h1>👑 RoyalX</h1>
+            <p>Приложение собирается, пожалуйста обновите страницу через несколько секунд...</p>
+          </div>
+        </body>
+      </html>
+    `);
   });
 }
 
@@ -2618,18 +2643,26 @@ app.post('/api/admin/db/withdrawals/status', (req, res) => {
 // Start Express Server
 let serverInstance = null;
 if (process.env.NODE_ENV !== 'test') {
-  serverInstance = app.listen(PORT, async () => {
+  serverInstance = app.listen(PORT, () => {
     console.log(`==================================================`);
     console.log(`🚀 RoyalX React Web Server running on: http://localhost:${PORT}`);
     
-    await startTunnel();
-
+    // Start bot immediately - NEVER wait for tunnel!
     if (BOT_TOKEN && BOT_TOKEN !== 'YOUR_BOT_TOKEN_HERE' && BOT_TOKEN !== 'YOUR_TELEGRAM_BOT_TOKEN') {
       initTelegramBot(BOT_TOKEN);
     } else {
       console.log('\n⚠️ BOT_TOKEN не указан в файле .env');
       console.log('👉 Укажите токен от @BotFather в .env для запуска бота!\n');
     }
+
+    // Resolve or spawn tunnel in background without blocking server or bot
+    startTunnel().then((resolvedUrl) => {
+      if (resolvedUrl) {
+        currentWebAppUrl = resolvedUrl;
+        console.log(`🌐 WebApp URL configured: ${currentWebAppUrl}`);
+        if (telegramBot) updateBotMenuButton();
+      }
+    });
   });
 
   serverInstance.on('error', (err) => {
@@ -2643,18 +2676,47 @@ if (process.env.NODE_ENV !== 'test') {
 
 function startTunnel() {
   return new Promise((resolve) => {
-    if (process.env.WEBAPP_URL) {
+    // 1. If explicit non-localhost URL is provided, use it immediately
+    if (process.env.WEBAPP_URL && !process.env.WEBAPP_URL.includes('localhost')) {
       currentWebAppUrl = process.env.WEBAPP_URL;
-      console.log(`✅ Using configured URL: ${currentWebAppUrl}`);
+      console.log(`✅ Using configured WebApp URL: ${currentWebAppUrl}`);
       return resolve(currentWebAppUrl);
     }
+
+    // 2. Detect cloud hosting environments (Railway, Render, Heroku, etc.)
+    const isCloud = Boolean(
+      process.env.RAILWAY_ENVIRONMENT ||
+      process.env.RAILWAY_PROJECT_ID ||
+      process.env.RENDER ||
+      process.env.HEROKU_APP_NAME ||
+      (process.env.PORT && process.env.NODE_ENV === 'production')
+    );
+
+    if (isCloud) {
+      if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+        currentWebAppUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+      } else if (process.env.WEBAPP_URL) {
+        currentWebAppUrl = process.env.WEBAPP_URL;
+      }
+      console.log(`☁️ Cloud environment detected. Using URL: ${currentWebAppUrl}`);
+      return resolve(currentWebAppUrl);
+    }
+
+    // Safety timeout: Never block server longer than 5 seconds in local dev
+    let isResolved = false;
+    const safetyTimer = setTimeout(() => {
+      if (!isResolved) {
+        isResolved = true;
+        console.warn('[Tunnel] Dev tunnel timeout. Using fallback URL:', currentWebAppUrl);
+        resolve(currentWebAppUrl);
+      }
+    }, 5000);
 
     const cfPath = fs.existsSync('C:\\Program Files (x86)\\cloudflared\\cloudflared.exe')
       ? 'C:\\Program Files (x86)\\cloudflared\\cloudflared.exe'
       : 'cloudflared';
 
     console.log(`🌐 Launching high-performance Cloudflare HTTPS tunnel...`);
-    let isResolved = false;
 
     try {
       const cf = spawn(cfPath, ['tunnel', '--url', `http://localhost:${PORT}`]);
@@ -2670,6 +2732,7 @@ function startTunnel() {
           if (telegramBot) updateBotMenuButton();
           if (!isResolved) {
             isResolved = true;
+            clearTimeout(safetyTimer);
             resolve(currentWebAppUrl);
           }
         }
@@ -2679,25 +2742,31 @@ function startTunnel() {
       cf.stderr.on('data', handleOutput);
 
       cf.on('close', () => {
-        console.log('⚠️ Cloudflare tunnel closed. Reconnecting in 2s...');
-        setTimeout(startTunnel, 2000);
+        console.log('⚠️ Cloudflare tunnel closed.');
       });
 
       cf.on('error', (err) => {
-        console.log('⚠️ Cloudflare error, falling back to SSH tunnel:', err.message);
-        startSshTunnel().then(resolve);
-      });
-
-      // Safety fallback to SSH if Cloudflare takes >6s
-      setTimeout(() => {
+        console.log('⚠️ Cloudflare not available, falling back to SSH tunnel:', err.message);
         if (!isResolved) {
-          startSshTunnel().then(resolve);
+          startSshTunnel().then((sshUrl) => {
+            if (!isResolved) {
+              isResolved = true;
+              clearTimeout(safetyTimer);
+              resolve(sshUrl);
+            }
+          });
         }
-      }, 6000);
-
+      });
     } catch (e) {
-      console.log('⚠️ Could not spawn cloudflared, falling back to SSH tunnel:', e.message);
-      startSshTunnel().then(resolve);
+      if (!isResolved) {
+        startSshTunnel().then((sshUrl) => {
+          if (!isResolved) {
+            isResolved = true;
+            clearTimeout(safetyTimer);
+            resolve(sshUrl);
+          }
+        });
+      }
     }
   });
 }
@@ -2706,44 +2775,67 @@ function startSshTunnel() {
   return new Promise((resolve) => {
     if (process.env.WEBAPP_URL) {
       currentWebAppUrl = process.env.WEBAPP_URL;
-      console.log(`✅ Using configured URL: ${currentWebAppUrl}`);
       return resolve(currentWebAppUrl);
     }
 
-    console.log(`🌐 Launching SSH HTTPS tunnel...`);
-    const ssh = spawn('ssh', [
-      '-o', 'StrictHostKeyChecking=no',
-      '-o', 'ServerAliveInterval=15',
-      '-o', 'ServerAliveCountMax=3',
-      '-R', '80:localhost:' + PORT,
-      'nokey@localhost.run'
-    ]);
-
-    const handleOutput = (data) => {
-      const str = data.toString();
-      const match = str.match(/https:\/\/[a-zA-Z0-9-]+\.lhr\.life/);
-      if (match && match[0] !== currentWebAppUrl) {
-        currentWebAppUrl = match[0];
-        console.log(`==================================================`);
-        console.log(`✅ SSH HTTPS Tunnel Active: ${currentWebAppUrl}`);
-        console.log(`==================================================`);
-        if (telegramBot) updateBotMenuButton();
+    let resolved = false;
+    const safety = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
         resolve(currentWebAppUrl);
       }
-    };
+    }, 4000);
 
-    ssh.stdout.on('data', handleOutput);
-    ssh.stderr.on('data', handleOutput);
+    try {
+      console.log(`🌐 Launching SSH HTTPS tunnel...`);
+      const ssh = spawn('ssh', [
+        '-o', 'StrictHostKeyChecking=no',
+        '-o', 'ServerAliveInterval=15',
+        '-o', 'ServerAliveCountMax=3',
+        '-R', '80:localhost:' + PORT,
+        'nokey@localhost.run'
+      ]);
 
-    ssh.on('close', () => {
-      console.log('⚠️ SSH tunnel connection closed. Reconnecting in 2s...');
-      setTimeout(startSshTunnel, 2000);
-    });
+      ssh.stdout.on('data', (data) => {
+        const str = data.toString();
+        const match = str.match(/https:\/\/[a-zA-Z0-9-]+\.lhr\.life/);
+        if (match && match[0] !== currentWebAppUrl) {
+          currentWebAppUrl = match[0];
+          console.log(`==================================================`);
+          console.log(`✅ SSH HTTPS Tunnel Active: ${currentWebAppUrl}`);
+          console.log(`==================================================`);
+          if (telegramBot) updateBotMenuButton();
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(safety);
+            resolve(currentWebAppUrl);
+          }
+        }
+      });
 
-    ssh.on('error', (err) => {
-      console.log('⚠️ SSH tunnel error:', err.message);
-      setTimeout(startSshTunnel, 3000);
-    });
+      ssh.on('error', (err) => {
+        console.log('⚠️ SSH tunnel note:', err.message);
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(safety);
+          resolve(currentWebAppUrl);
+        }
+      });
+
+      ssh.on('close', () => {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(safety);
+          resolve(currentWebAppUrl);
+        }
+      });
+    } catch (e) {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(safety);
+        resolve(currentWebAppUrl);
+      }
+    }
   });
 }
 
