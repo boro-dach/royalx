@@ -29,7 +29,46 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
-let currentWebAppUrl = process.env.WEBAPP_URL || `http://localhost:${PORT}`;
+function formatWebAppUrl(url) {
+  if (!url) return '';
+  let clean = String(url).trim().replace(/^\/+/, '');
+  if (clean.includes('localhost') || clean.includes('127.0.0.1')) {
+    if (!clean.startsWith('http://') && !clean.startsWith('https://')) {
+      clean = 'http://' + clean;
+    }
+  } else {
+    if (clean.startsWith('http://')) {
+      clean = clean.replace('http://', 'https://');
+    } else if (!clean.startsWith('https://')) {
+      clean = 'https://' + clean;
+    }
+  }
+  return clean.replace(/\/+$/, '');
+}
+
+function getWebAppUrlForTelegram() {
+  let base = formatWebAppUrl(currentWebAppUrl);
+  if (!base || base.includes('localhost') || base.includes('127.0.0.1')) {
+    if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+      base = formatWebAppUrl(process.env.RAILWAY_PUBLIC_DOMAIN);
+    } else if (process.env.WEBAPP_URL && !process.env.WEBAPP_URL.includes('localhost')) {
+      base = formatWebAppUrl(process.env.WEBAPP_URL);
+    }
+  }
+  if (!base) {
+    base = 'https://royalx-production.up.railway.app';
+  }
+  // Telegram Bot API strictly requires HTTPS links for inline keyboard WebApp buttons
+  if (!base.startsWith('https://')) {
+    base = base.replace(/^http:\/\//, 'https://');
+    if (!base.startsWith('https://')) {
+      base = `https://${base}`;
+    }
+  }
+  return base.includes('?') ? `${base}&v=${Date.now()}` : `${base}?v=${Date.now()}`;
+}
+
+let currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL || `http://localhost:${PORT}`);
 let telegramBot = null;
 const activeChatIds = new Set();
 app.use(express.json());
@@ -2785,7 +2824,7 @@ function startTunnel() {
   return new Promise((resolve) => {
     // 1. If explicit non-localhost URL is provided, use it immediately
     if (process.env.WEBAPP_URL && !process.env.WEBAPP_URL.includes('localhost')) {
-      currentWebAppUrl = process.env.WEBAPP_URL;
+      currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL);
       console.log(`✅ Using configured WebApp URL: ${currentWebAppUrl}`);
       return resolve(currentWebAppUrl);
     }
@@ -2801,9 +2840,9 @@ function startTunnel() {
 
     if (isCloud) {
       if (process.env.RAILWAY_PUBLIC_DOMAIN) {
-        currentWebAppUrl = `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`;
+        currentWebAppUrl = formatWebAppUrl(process.env.RAILWAY_PUBLIC_DOMAIN);
       } else if (process.env.WEBAPP_URL) {
-        currentWebAppUrl = process.env.WEBAPP_URL;
+        currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL);
       }
       console.log(`☁️ Cloud environment detected. Using URL: ${currentWebAppUrl}`);
       return resolve(currentWebAppUrl);
@@ -2881,7 +2920,7 @@ function startTunnel() {
 function startSshTunnel() {
   return new Promise((resolve) => {
     if (process.env.WEBAPP_URL) {
-      currentWebAppUrl = process.env.WEBAPP_URL;
+      currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL);
       return resolve(currentWebAppUrl);
     }
 
@@ -3019,9 +3058,7 @@ function initTelegramBot(token) {
 
 <tg-emoji emoji-id="5240422475547846797">🎲</tg-emoji> Приятной игры!`;
 
-      const webAppUrlWithBust = currentWebAppUrl.includes('?') 
-        ? `${currentWebAppUrl}&v=${Date.now()}` 
-        : `${currentWebAppUrl}?v=${Date.now()}`;
+      const webAppUrlWithBust = getWebAppUrlForTelegram();
 
       const replyMarkup = {
         inline_keyboard: [
@@ -3067,9 +3104,7 @@ function initTelegramBot(token) {
 
 <tg-emoji emoji-id="5240422475547846797">🎲</tg-emoji> Приятной игры!`;
 
-            const webAppUrlWithBust = currentWebAppUrl.includes('?') 
-              ? `${currentWebAppUrl}&v=${Date.now()}` 
-              : `${currentWebAppUrl}?v=${Date.now()}`;
+            const webAppUrlWithBust = getWebAppUrlForTelegram();
 
             const replyMarkup = {
               inline_keyboard: [
@@ -3249,14 +3284,12 @@ function initTelegramBot(token) {
 async function updateBotMenuButton(chatId) {
   if (!telegramBot) return;
   try {
-    const webAppUrlWithBust = currentWebAppUrl.includes('?') 
-      ? `${currentWebAppUrl}&v=${Date.now()}` 
-      : `${currentWebAppUrl}?v=${Date.now()}`;
+    const webAppUrlWithBust = getWebAppUrlForTelegram();
 
     const opts = {
       menu_button: JSON.stringify({
         type: 'web_app',
-        text: 'Royal X',
+        text: 'Играть 🚀',
         web_app: { url: webAppUrlWithBust }
       })
     };
