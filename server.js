@@ -375,8 +375,8 @@ const DEFAULT_ADMINS = (process.env.ADMIN_IDS
 const DEFAULT_TRC20 = process.env.TRC20_WALLET || 'TYDzsYUEpvnYmQk4zGP9sWWcTEd36d53dB';
 const DEFAULT_TON = process.env.TON_WALLET || 'UQCq7UgQ1bhs9pI8dw5juHB1cYwo1wgcQ0zxqd8eCRktwGVD';
 const SUPPORT_USERNAME = process.env.SUPPORT_USERNAME || 'MartinCartier';
-const rawChannel = (process.env.CHANNEL_USERNAME || 'RXgambling').replace(/^@/, '');
-const CHANNEL_USERNAME = (!rawChannel || rawChannel === 'RoyalX_Win') ? 'RXgambling' : rawChannel;
+const rawChannel = (process.env.CHANNEL_USERNAME || 'RoyalX_Win').replace(/^@/, '');
+const CHANNEL_USERNAME = (!rawChannel || rawChannel === 'RXgambling') ? 'RoyalX_Win' : rawChannel;
 const rawBot = (process.env.BOT_USERNAME || 'RXcasbot').replace(/^@/, '');
 const BOT_USERNAME = (!rawBot || rawBot === 'RoyalX_Bot') ? 'RXcasbot' : rawBot;
 const CHANNEL_URL = process.env.CHANNEL_URL || `https://t.me/${CHANNEL_USERNAME}`;
@@ -3013,11 +3013,11 @@ function initTelegramBot(token) {
       }
 
       const welcomeText = 
-`<b><tg-emoji emoji-id="5242503662080663792">💰</tg-emoji> Добро пожаловать в Royal X</b>
+`<tg-emoji emoji-id="5242503662080663792">💰</tg-emoji> Добро пожаловать в Royal X
 
-<blockquote><b>Наш канал - @${CHANNEL_USERNAME}</b></blockquote>
+Наш канал - @${CHANNEL_USERNAME}
 
-<b><tg-emoji emoji-id="5240422475547846797">🎲</tg-emoji> Приятной игры!</b>`;
+<tg-emoji emoji-id="5240422475547846797">🎲</tg-emoji> Приятной игры!`;
 
       const webAppUrlWithBust = currentWebAppUrl.includes('?') 
         ? `${currentWebAppUrl}&v=${Date.now()}` 
@@ -3027,7 +3027,7 @@ function initTelegramBot(token) {
         inline_keyboard: [
           [
             {
-              text: 'Royal X',
+              text: 'Играть 🚀',
               web_app: { url: webAppUrlWithBust }
             }
           ]
@@ -3061,11 +3061,11 @@ function initTelegramBot(token) {
             }).catch(() => {});
 
             const welcomeText = 
-`<b><tg-emoji emoji-id="5242503662080663792">💰</tg-emoji> Добро пожаловать в Royal X</b>
+`<tg-emoji emoji-id="5242503662080663792">💰</tg-emoji> Добро пожаловать в Royal X
 
-<blockquote><b>Наш канал - @${CHANNEL_USERNAME}</b></blockquote>
+Наш канал - @${CHANNEL_USERNAME}
 
-<b><tg-emoji emoji-id="5240422475547846797">🎲</tg-emoji> Приятной игры!</b>`;
+<tg-emoji emoji-id="5240422475547846797">🎲</tg-emoji> Приятной игры!`;
 
             const webAppUrlWithBust = currentWebAppUrl.includes('?') 
               ? `${currentWebAppUrl}&v=${Date.now()}` 
@@ -3075,7 +3075,7 @@ function initTelegramBot(token) {
               inline_keyboard: [
                 [
                   {
-                    text: 'Royal X',
+                    text: 'Играть 🚀',
                     web_app: { url: webAppUrlWithBust }
                   }
                 ]

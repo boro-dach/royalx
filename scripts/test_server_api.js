@@ -68,7 +68,7 @@ async function runApiTests() {
   const configRes = await request(app, 'GET', '/api/config');
   assert.strictEqual(configRes.status, 200, 'Config endpoint should return 200');
   assert.strictEqual(configRes.body.botUsername, process.env.BOT_USERNAME || 'RXcasbot');
-  assert.strictEqual(configRes.body.channelUsername, process.env.CHANNEL_USERNAME || 'RXgambling');
+  assert.strictEqual(configRes.body.channelUsername, process.env.CHANNEL_USERNAME || 'RoyalX_Win');
   assert(configRes.body.termsUrl && configRes.body.rulesUrl && configRes.body.privacyUrl, 'Legal URLs must be populated');
   assert(configRes.body.superAdminId, 'superAdminId must be present');
   console.log('  ✅ [PASS] GET /api/config returned public environment configuration');
@@ -194,8 +194,8 @@ async function runApiTests() {
   assert.strictEqual(subRes.status, 200);
   assert.strictEqual(subRes.body.success, true);
   assert.strictEqual(subRes.body.isSubscribed, true);
-  assert.strictEqual(subRes.body.channelUsername, 'RXgambling');
-  console.log('  ✅ [PASS] POST /api/subscription/check verified channel @RXgambling');
+  assert.strictEqual(subRes.body.channelUsername, 'RoyalX_Win');
+  console.log('  ✅ [PASS] POST /api/subscription/check verified channel @RoyalX_Win');
 
   console.log('====================================================');
   console.log('🎉 ALL 13 EXPRESS SERVER API TESTS PASSED!');

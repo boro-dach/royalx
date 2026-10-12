@@ -2,13 +2,13 @@
 const rawBot = (import.meta.env.VITE_BOT_USERNAME || 'RXcasbot').replace(/^@/, '');
 const cleanBot = (!rawBot || rawBot === 'RoyalX_Bot') ? 'RXcasbot' : rawBot;
 
-const rawChannel = (import.meta.env.VITE_CHANNEL_USERNAME || 'RXgambling').replace(/^@/, '');
-const cleanChannel = (!rawChannel || rawChannel === 'RoyalX_Win') ? 'RXgambling' : rawChannel;
+const rawChannel = (import.meta.env.VITE_CHANNEL_USERNAME || 'RoyalX_Win').replace(/^@/, '');
+const cleanChannel = (!rawChannel || rawChannel === 'RXgambling') ? 'RoyalX_Win' : rawChannel;
 
 export const APP_CONFIG = {
   botUsername: cleanBot,
   channelUsername: cleanChannel,
-  channelUrl: (import.meta.env.VITE_CHANNEL_URL || `https://t.me/${cleanChannel}`).replace('RoyalX_Win', 'RXgambling'),
+  channelUrl: (import.meta.env.VITE_CHANNEL_URL || `https://t.me/${cleanChannel}`).replace('RXgambling', 'RoyalX_Win'),
   supportUsername: import.meta.env.VITE_SUPPORT_USERNAME || 'MartinCartier',
   supportUrl: import.meta.env.VITE_SUPPORT_URL || 'https://t.me/MartinCartier',
   termsUrl: import.meta.env.VITE_TERMS_URL || 'https://telegra.ph/POLZOVATELSKOE-SOGLASHENIE-ROYAL-X-09-18',
