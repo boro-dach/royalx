@@ -154,6 +154,8 @@ export function AppProvider({ children }) {
     }
   });
 
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+
   const getAuthHeaders = () => {
     const token = sessionToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('rx_session_token') : '');
     const headers = {};
