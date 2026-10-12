@@ -21,6 +21,7 @@ import StatsModal from './components/modals/StatsModal';
 import RanksModal from './components/modals/RanksModal';
 import AdminModal from './components/modals/AdminModal';
 import TermsModal from './components/modals/TermsModal';
+import SubscriptionModal from './components/modals/SubscriptionModal';
 import GameOverlay from './components/games/GameOverlay';
 import Toast from './components/common/Toast';
 import { APP_CONFIG } from './config';
@@ -60,6 +61,7 @@ export default function App() {
       {activeModal === 'admin' && isUserAdmin && <AdminModal />}
       <GameOverlay />
       <TermsModal />
+      <SubscriptionModal />
 
       {/* Minimalist Toast Notifications */}
       <Toast toast={toast} />

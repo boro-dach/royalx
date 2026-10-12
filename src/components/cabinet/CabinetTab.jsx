@@ -62,6 +62,26 @@ export default function CabinetTab() {
       action: () => setActiveModal('history')
     },
     {
+      id: 'channel',
+      icon: (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M21.5 2.5L2 10.5L9.5 14L18 6.5L12 15.5L18.5 21.5L21.5 2.5Z" fill="#00e699" fillOpacity="0.2" stroke="#00e699" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      ),
+      title: 'Официальный канал',
+      subtext: `@${APP_CONFIG.channelUsername} — бонусы и промокоды`,
+      action: () => {
+        const url = APP_CONFIG.channelUrl;
+        if (typeof window !== 'undefined' && window.Telegram?.WebApp?.openTelegramLink) {
+          window.Telegram.WebApp.openTelegramLink(url);
+        } else if (typeof window !== 'undefined' && window.Telegram?.WebApp?.openLink) {
+          window.Telegram.WebApp.openLink(url);
+        } else {
+          window.open(url, '_blank');
+        }
+      }
+    },
+    {
       id: 'support',
       icon: <HeadphonesIcon size={18} color="#8a8f99" />,
       title: 'Поддержка 24/7',

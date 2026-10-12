@@ -375,9 +375,10 @@ const DEFAULT_ADMINS = (process.env.ADMIN_IDS
 const DEFAULT_TRC20 = process.env.TRC20_WALLET || 'TYDzsYUEpvnYmQk4zGP9sWWcTEd36d53dB';
 const DEFAULT_TON = process.env.TON_WALLET || 'UQCq7UgQ1bhs9pI8dw5juHB1cYwo1wgcQ0zxqd8eCRktwGVD';
 const SUPPORT_USERNAME = process.env.SUPPORT_USERNAME || 'MartinCartier';
-const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || 'RoyalX_Win';
+const CHANNEL_USERNAME = (process.env.CHANNEL_USERNAME || 'RXgambling').replace(/^@/, '');
 const BOT_USERNAME = process.env.BOT_USERNAME || 'RoyalX_Bot';
 const CHANNEL_URL = process.env.CHANNEL_URL || `https://t.me/${CHANNEL_USERNAME}`;
+const CHANNEL_CHAT_ID = process.env.CHANNEL_CHAT_ID || `@${CHANNEL_USERNAME}`;
 const SUPPORT_URL = process.env.SUPPORT_URL || `https://t.me/${SUPPORT_USERNAME}`;
 const TERMS_URL = process.env.TERMS_URL || 'https://telegra.ph/POLZOVATELSKOE-SOGLASHENIE-ROYAL-X-09-18';
 const RULES_URL = process.env.RULES_URL || 'https://telegra.ph/PRAVILA-ISPOLZOVANIYA-SERVISA-ROYAL-X-09-18';
@@ -539,6 +540,7 @@ class DatabaseManager {
       rtp: u.rtp || 'auto',
       isBanned: !!u.isBanned,
       agreedToTerms: !!u.agreedToTerms,
+      isSubscribed: !!u.isSubscribed,
       isAdmin: this.isAdmin(u.id),
       historyCount: (u.history || []).length
     }));
@@ -556,6 +558,7 @@ class DatabaseManager {
       rtp: user.rtp || 'auto',
       isBanned: !!user.isBanned,
       agreedToTerms: !!user.agreedToTerms,
+      isSubscribed: !!user.isSubscribed,
       isAdmin: this.isAdmin(id),
       invoices: userInvoices,
       withdrawals: userWithdrawals
@@ -605,6 +608,9 @@ class DatabaseManager {
     }
     if (patch.agreedToTerms !== undefined) {
       user.agreedToTerms = !!patch.agreedToTerms;
+    }
+    if (patch.isSubscribed !== undefined) {
+      user.isSubscribed = !!patch.isSubscribed;
     }
     if (patch.name) {
       user.name = String(patch.name);
@@ -933,6 +939,7 @@ class DatabaseManager {
         rtp: 'auto',
         isBanned: false,
         agreedToTerms: false,
+        isSubscribed: false,
         history: []
       };
       this.save();
@@ -943,6 +950,7 @@ class DatabaseManager {
     if (this.data.users[id].rtp === undefined) this.data.users[id].rtp = 'auto';
     if (this.data.users[id].isBanned === undefined) this.data.users[id].isBanned = false;
     if (this.data.users[id].agreedToTerms === undefined) this.data.users[id].agreedToTerms = false;
+    if (this.data.users[id].isSubscribed === undefined) this.data.users[id].isSubscribed = false;
     return this.data.users[id];
   }
 
@@ -1113,11 +1121,14 @@ app.use(authMiddleware(db, {
     '/api/auth/register',
     '/api/auth/login',
     '/api/auth/dev-login',
-    '/api/admin/check'
+    '/api/admin/check',
+    '/api/subscription/check',
+    '/api/subscription/status'
   ],
   publicPrefixes: [
     '/assets',
-    '/public'
+    '/public',
+    '/api/subscription'
   ]
 }));
 
@@ -1307,6 +1318,95 @@ app.post('/api/user/agree-terms', (req, res) => {
   db.syncUserToSupabase(user);
   console.log(`[DB] 📜 User ${userId} accepted legal terms. Saved permanently in database.`);
   res.json({ success: true, agreedToTerms: true, user });
+});
+
+// Helper to verify Telegram channel subscription
+async function checkUserSubscription(userId) {
+  const id = String(userId || '').trim();
+  if (!id) return false;
+  if (db.isAdmin(id)) return true;
+
+  const user = db.getUser(id);
+  if (user && user.isSubscribed) return true;
+
+  if (!telegramBot) {
+    return true;
+  }
+
+  const targetChannel = CHANNEL_CHAT_ID;
+  try {
+    const member = await telegramBot.getChatMember(targetChannel, id);
+    const isMember = ['creator', 'administrator', 'member', 'restricted'].includes(member?.status);
+    if (isMember) {
+      if (user) {
+        user.isSubscribed = true;
+        db.save();
+        db.syncUserToSupabase(user).catch(() => {});
+      }
+      return true;
+    }
+    return false;
+  } catch (err) {
+    const msg = err.message || '';
+    console.warn(`[SubCheck] Warning checking user ${id} in ${targetChannel}:`, msg);
+    if (
+      msg.includes('chat not found') ||
+      msg.includes('not a member') ||
+      msg.includes('CHAT_ADMIN_REQUIRED') ||
+      msg.includes('not enough rights') ||
+      msg.includes('member list is inaccessible')
+    ) {
+      console.warn(`[SubCheck] ⚠️ Telegram bot lacks rights in ${targetChannel}. Permitting access as fallback.`);
+      if (user) {
+        user.isSubscribed = true;
+        db.save();
+      }
+      return true;
+    }
+    return false;
+  }
+}
+
+app.post('/api/subscription/check', async (req, res) => {
+  const userId = req.userId || req.body?.userId;
+  if (!userId) {
+    return res.status(400).json({ success: false, error: 'userId is required' });
+  }
+  const isSubscribed = await checkUserSubscription(userId);
+  if (isSubscribed) {
+    const user = db.getUser(userId);
+    return res.json({
+      success: true,
+      isSubscribed: true,
+      channelUsername: CHANNEL_USERNAME,
+      channelUrl: CHANNEL_URL,
+      user
+    });
+  }
+  return res.json({
+    success: false,
+    isSubscribed: false,
+    channelUsername: CHANNEL_USERNAME,
+    channelUrl: CHANNEL_URL,
+    error: `Вы ещё не подписались на канал @${CHANNEL_USERNAME}. Пожалуйста, подпишитесь и нажмите «Проверить».`
+  });
+});
+
+app.get('/api/subscription/status', (req, res) => {
+  const userId = req.userId || req.query?.userId;
+  if (!userId) {
+    return res.json({
+      isSubscribed: false,
+      channelUsername: CHANNEL_USERNAME,
+      channelUrl: CHANNEL_URL
+    });
+  }
+  const user = db.getUser(userId);
+  return res.json({
+    isSubscribed: Boolean(user?.isSubscribed || db.isAdmin(userId)),
+    channelUsername: CHANNEL_USERNAME,
+    channelUrl: CHANNEL_URL
+  });
 });
 
 app.post('/api/user/bind-referrer', (req, res) => {
@@ -2873,6 +2973,43 @@ function initTelegramBot(token) {
         }
       }
 
+      // Check obligatory channel subscription
+      const isSubscribed = await checkUserSubscription(userId);
+      if (!isSubscribed) {
+        const subMarkup = {
+          inline_keyboard: [
+            [
+              {
+                text: '📢 Подписаться на канал',
+                url: CHANNEL_URL
+              }
+            ],
+            [
+              {
+                text: '✅ Проверить подписку',
+                callback_data: `check_sub_${startPayload || 'direct'}`
+              }
+            ]
+          ]
+        };
+
+        const subText = 
+`<b><tg-emoji emoji-id="5242503662080663792">💰</tg-emoji> Добро пожаловать в Royal X!</b>
+
+⚠️ <b>Обязательная подписка:</b>
+Для доступа к играм, бонусам и выводу средств необходимо подписаться на наш официальный Telegram-канал:
+📢 <b>@${CHANNEL_USERNAME}</b>
+
+<i>После подписки нажмите кнопку «Проверить подписку» ниже.</i>`;
+
+        return telegramBot.sendMessage(chatId, subText, {
+          parse_mode: 'HTML',
+          reply_markup: subMarkup
+        }).catch(err => {
+          console.error('Error sending start subscription gate:', err.message);
+        });
+      }
+
       const welcomeText = 
 `<b><tg-emoji emoji-id="5242503662080663792">💰</tg-emoji> Добро пожаловать в Royal X</b>
 
@@ -2908,6 +3045,57 @@ function initTelegramBot(token) {
     telegramBot.on('callback_query', async (query) => {
       try {
         const data = query.data || '';
+
+        // Handle channel subscription check button
+        if (data.startsWith('check_sub')) {
+          const userId = String(query.from.id);
+          const chatId = query.message?.chat?.id || query.from.id;
+          const isSub = await checkUserSubscription(userId);
+
+          if (isSub) {
+            await telegramBot.answerCallbackQuery(query.id, {
+              text: '✅ Подписка подтверждена! Добро пожаловать в Royal X!',
+              show_alert: false
+            }).catch(() => {});
+
+            const welcomeText = 
+`<b><tg-emoji emoji-id="5242503662080663792">💰</tg-emoji> Добро пожаловать в Royal X</b>
+
+<blockquote><b>Наш канал - @${CHANNEL_USERNAME}</b></blockquote>
+
+<b><tg-emoji emoji-id="5240422475547846797">🎲</tg-emoji> Приятной игры!</b>`;
+
+            const webAppUrlWithBust = currentWebAppUrl.includes('?') 
+              ? `${currentWebAppUrl}&v=${Date.now()}` 
+              : `${currentWebAppUrl}?v=${Date.now()}`;
+
+            const replyMarkup = {
+              inline_keyboard: [
+                [
+                  {
+                    text: 'Royal X',
+                    web_app: { url: webAppUrlWithBust }
+                  }
+                ]
+              ]
+            };
+
+            updateBotMenuButton(chatId);
+
+            return telegramBot.sendMessage(chatId, welcomeText, {
+              parse_mode: 'HTML',
+              reply_markup: replyMarkup
+            }).catch(err => {
+              console.error('Error sending start message after sub check:', err.message);
+            });
+          } else {
+            return telegramBot.answerCallbackQuery(query.id, {
+              text: `❌ Вы ещё не подписались на канал @${CHANNEL_USERNAME}! Пожалуйста, подпишитесь и повторите проверку.`,
+              show_alert: true
+            }).catch(() => {});
+          }
+        }
+
         const adminId = String(query.from.id);
 
         if (!data.startsWith('w_appr_') && !data.startsWith('w_rejc_')) {

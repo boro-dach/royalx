@@ -1,8 +1,8 @@
 // Application-wide configuration derived from environment variables
 export const APP_CONFIG = {
   botUsername: import.meta.env.VITE_BOT_USERNAME || 'RoyalX_Bot',
-  channelUsername: import.meta.env.VITE_CHANNEL_USERNAME || 'RoyalX_Win',
-  channelUrl: import.meta.env.VITE_CHANNEL_URL || 'https://t.me/RoyalX_Win',
+  channelUsername: import.meta.env.VITE_CHANNEL_USERNAME || 'RXgambling',
+  channelUrl: import.meta.env.VITE_CHANNEL_URL || 'https://t.me/RXgambling',
   supportUsername: import.meta.env.VITE_SUPPORT_USERNAME || 'MartinCartier',
   supportUrl: import.meta.env.VITE_SUPPORT_URL || 'https://t.me/MartinCartier',
   termsUrl: import.meta.env.VITE_TERMS_URL || 'https://telegra.ph/POLZOVATELSKOE-SOGLASHENIE-ROYAL-X-09-18',

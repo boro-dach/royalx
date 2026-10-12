@@ -68,7 +68,7 @@ async function runApiTests() {
   const configRes = await request(app, 'GET', '/api/config');
   assert.strictEqual(configRes.status, 200, 'Config endpoint should return 200');
   assert.strictEqual(configRes.body.botUsername, process.env.BOT_USERNAME || 'RoyalX_Bot');
-  assert.strictEqual(configRes.body.channelUsername, process.env.CHANNEL_USERNAME || 'RoyalX_Win');
+  assert.strictEqual(configRes.body.channelUsername, process.env.CHANNEL_USERNAME || 'RXgambling');
   assert(configRes.body.termsUrl && configRes.body.rulesUrl && configRes.body.privacyUrl, 'Legal URLs must be populated');
   assert(configRes.body.superAdminId, 'superAdminId must be present');
   console.log('  ✅ [PASS] GET /api/config returned public environment configuration');
@@ -186,8 +186,19 @@ async function runApiTests() {
   assert.strictEqual(afterLogout.status, 401);
   console.log('  ✅ [PASS] GET /api/auth/me with revoked token rejected with 401');
 
+  // Test 13: Subscription check endpoint (/api/subscription/check)
+  const subRes = await request(app, 'POST', '/api/subscription/check', {
+    headers: { 'Content-Type': 'application/json' },
+    body: { userId: '8281274109' } // superadmin auto-subscribed
+  });
+  assert.strictEqual(subRes.status, 200);
+  assert.strictEqual(subRes.body.success, true);
+  assert.strictEqual(subRes.body.isSubscribed, true);
+  assert.strictEqual(subRes.body.channelUsername, 'RXgambling');
+  console.log('  ✅ [PASS] POST /api/subscription/check verified channel @RXgambling');
+
   console.log('====================================================');
-  console.log('🎉 ALL 12 EXPRESS SERVER API TESTS PASSED!');
+  console.log('🎉 ALL 13 EXPRESS SERVER API TESTS PASSED!');
   console.log('====================================================');
 
   process.exit(0);

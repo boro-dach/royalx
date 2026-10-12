@@ -78,6 +78,14 @@ export function AppProvider({ children }) {
     return null;
   });
 
+  // Obligatory Telegram Channel Subscription Status (@RXgambling)
+  const [isSubscribed, setIsSubscribed] = useState(() => {
+    if (initialCache && initialCache.isSubscribed !== undefined) {
+      return Boolean(initialCache.isSubscribed);
+    }
+    return null;
+  });
+
   // Personal User RTP ('auto' | 'win' | 'lose')
   const [userRtp, setUserRtp] = useState('auto');
 
@@ -179,6 +187,7 @@ export function AppProvider({ children }) {
     if (Array.isArray(u.history)) setHistoryItems(u.history);
     if (u.rtp) setUserRtp(u.rtp);
     if (u.agreedToTerms !== undefined) setHasAgreedToTerms(Boolean(u.agreedToTerms));
+    if (u.isSubscribed !== undefined) setIsSubscribed(Boolean(u.isSubscribed));
     if (isAdminFlag !== undefined) setIsAdmin(Boolean(isAdminFlag));
 
     const stats = {
@@ -204,7 +213,8 @@ export function AppProvider({ children }) {
         history: u.history,
         userStats: stats,
         referralStats: refStats,
-        agreedToTerms: Boolean(u.agreedToTerms)
+        agreedToTerms: Boolean(u.agreedToTerms),
+        isSubscribed: Boolean(u.isSubscribed)
       }));
     } catch (e) {}
   };
@@ -807,6 +817,31 @@ export function AppProvider({ children }) {
     }
   };
 
+  const checkSubscription = async () => {
+    try {
+      const uid = tgUser?.id || APP_CONFIG.superAdminId;
+      const res = await fetch('/api/subscription/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ userId: uid })
+      });
+      const data = await res.json();
+      if (data.isSubscribed) {
+        setIsSubscribed(true);
+        try {
+          localStorage.setItem('rx_subscribed_v1', 'true');
+        } catch (e) {}
+        showToast('Подписка подтверждена! 🎉');
+        return { success: true, isSubscribed: true };
+      }
+      showToast(data.error || 'Вы не подписаны на канал', 'error');
+      return { success: false, isSubscribed: false, error: data.error };
+    } catch (e) {
+      showToast('Ошибка проверки подписки', 'error');
+      return { success: false, error: e.message };
+    }
+  };
+
   // ==========================================
   // NON-JWT AUTHENTICATION ACTIONS
   // ==========================================
@@ -954,6 +989,9 @@ export function AppProvider({ children }) {
       hasAgreedToTerms,
       setHasAgreedToTerms,
       confirmTermsAgreement,
+      isSubscribed,
+      setIsSubscribed,
+      checkSubscription,
       activeTab,
       setActiveTab,
       activeGame,
