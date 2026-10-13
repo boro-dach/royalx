@@ -3,8 +3,8 @@ import { useApp } from '../../context/AppContext';
 import { CheckIcon, CloseIcon, TetherIcon } from '../common/Icons';
 
 export default function WithdrawModal() {
-  const { setActiveModal, closeModal, isClosingModal, balance, setBalance, showToast, wagerRequired, tgUser } = useApp();
-  const [paymentMethod, setPaymentMethod] = useState('usdt_trc20'); // 'usdt_trc20' | 'gram_ton' | 'cryptobot'
+  const { setActiveModal, closeModal, isClosingModal, balance, setBalance, showToast, wagerRequired, tgUser, getAuthHeaders } = useApp();
+  const [paymentMethod, setPaymentMethod] = useState('cryptobot'); // 'cryptobot' | 'xrocket' | 'usdt_trc20' | 'gram_ton'
   const [amount, setAmount] = useState('50');
   const [walletAddress, setWalletAddress] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -37,19 +37,20 @@ export default function WithdrawModal() {
     try {
       const res = await fetch('/api/payments/withdraw', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(getAuthHeaders ? getAuthHeaders() : {}) },
         body: JSON.stringify({
           userId: currentUserId,
           method: paymentMethod,
           amount: num,
-          address: walletAddress.trim()
+          address: (paymentMethod === 'cryptobot' || paymentMethod === 'xrocket') ? '' : walletAddress.trim()
         })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setBalance(prev => Math.max(0, parseFloat((prev - num).toFixed(2))));
         if (data.manualWithdraw) {
-          showToast(`📥 Заявка #${data.withdrawalId} отправлена администратору! Ожидайте подтверждения.`);
+          const methodLabel = paymentMethod === 'cryptobot' ? 'CryptoBot' : (paymentMethod === 'xrocket' ? 'xRocket' : 'кошелёк');
+          showToast(`📥 Заявка #${data.withdrawalId} отправлена! Чек поступит в бота сразу после одобрения.`);
         } else {
           showToast(`🚀 Выплата $${num.toFixed(2)} отправлена!`);
         }
@@ -87,7 +88,51 @@ export default function WithdrawModal() {
         <div className="modal-body-clean">
           {/* Payment Method Selector */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {/* 1. USDT TRC-20 */}
+            {/* 1. CryptoBot */}
+            <div 
+              className={`payment-method-card ${paymentMethod === 'cryptobot' ? 'active' : ''}`}
+              onClick={() => setPaymentMethod('cryptobot')}
+            >
+              <img src="/cryptobot-avatar.jpg" alt="CryptoBot" className="payment-avatar" decoding="async" />
+              <div style={{ flex: 1 }}>
+                <div className="payment-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>CryptoPay (CryptoBot)</span>
+                  <span style={{ fontSize: '10px', background: 'rgba(0,180,216,0.15)', color: '#00b4d8', padding: '1px 6px', borderRadius: '4px', fontWeight: '800' }}>
+                    Чек в бота
+                  </span>
+                </div>
+                <div className="payment-sub">Официальный чек в бот @CryptoBot • Быстрое одобрение</div>
+              </div>
+              {paymentMethod === 'cryptobot' && (
+                <div className="payment-check-badge">
+                  <CheckIcon size={12} color="#05140d" />
+                </div>
+              )}
+            </div>
+
+            {/* 2. xRocket */}
+            <div 
+              className={`payment-method-card ${paymentMethod === 'xrocket' ? 'active' : ''}`}
+              onClick={() => setPaymentMethod('xrocket')}
+            >
+              <img src="/xrocket.jpg" alt="xRocket" className="payment-avatar" decoding="async" />
+              <div style={{ flex: 1 }}>
+                <div className="payment-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>xRocket Pay</span>
+                  <span style={{ fontSize: '10px', background: 'rgba(255,107,0,0.15)', color: '#ff7b00', padding: '1px 6px', borderRadius: '4px', fontWeight: '800' }}>
+                    Чек в бота
+                  </span>
+                </div>
+                <div className="payment-sub">Официальный чек в бот @xrocket • Быстрое одобрение</div>
+              </div>
+              {paymentMethod === 'xrocket' && (
+                <div className="payment-check-badge">
+                  <CheckIcon size={12} color="#05140d" />
+                </div>
+              )}
+            </div>
+
+            {/* 3. USDT TRC-20 */}
             <div 
               className={`payment-method-card ${paymentMethod === 'usdt_trc20' ? 'active' : ''}`}
               onClick={() => setPaymentMethod('usdt_trc20')}
@@ -97,7 +142,7 @@ export default function WithdrawModal() {
                 <div className="payment-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>USDT (TRC-20)</span>
                   <span style={{ fontSize: '10px', background: 'rgba(0,230,153,0.15)', color: '#00e699', padding: '1px 6px', borderRadius: '4px', fontWeight: '800' }}>
-                    Заявка админу
+                    На адрес Tron
                   </span>
                 </div>
                 <div className="payment-sub">На кошелёк Tron (T...) • Ручная выплата 24/7</div>
@@ -109,7 +154,7 @@ export default function WithdrawModal() {
               )}
             </div>
 
-            {/* 2. Gram / TON */}
+            {/* 4. Gram / TON */}
             <div 
               className={`payment-method-card ${paymentMethod === 'gram_ton' ? 'active' : ''}`}
               onClick={() => setPaymentMethod('gram_ton')}
@@ -119,7 +164,7 @@ export default function WithdrawModal() {
                 <div className="payment-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span>Gram / TON</span>
                   <span style={{ fontSize: '10px', background: 'rgba(0,180,216,0.15)', color: '#00b4d8', padding: '1px 6px', borderRadius: '4px', fontWeight: '800' }}>
-                    Заявка админу
+                    На адрес TON
                   </span>
                 </div>
                 <div className="payment-sub">На кошелёк TON (UQ... / EQ...) • Быстрая выплата</div>
@@ -130,24 +175,28 @@ export default function WithdrawModal() {
                 </div>
               )}
             </div>
-
-            {/* 3. CryptoBot */}
-            <div 
-              className={`payment-method-card ${paymentMethod === 'cryptobot' ? 'active' : ''}`}
-              onClick={() => setPaymentMethod('cryptobot')}
-            >
-              <img src="/cryptobot-avatar.jpg" alt="CryptoBot" className="payment-avatar" decoding="async" />
-              <div style={{ flex: 1 }}>
-                <div className="payment-title">CryptoPay (CryptoBot)</div>
-                <div className="payment-sub">Официальный чек в Telegram бот</div>
-              </div>
-              {paymentMethod === 'cryptobot' && (
-                <div className="payment-check-badge">
-                  <CheckIcon size={12} color="#05140d" />
-                </div>
-              )}
-            </div>
           </div>
+
+          {/* Hint for Telegram Checks (CryptoBot & xRocket) */}
+          {(paymentMethod === 'cryptobot' || paymentMethod === 'xrocket') && (
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              borderRadius: '10px',
+              padding: '10px 12px',
+              fontSize: '12px',
+              lineHeight: '1.4',
+              color: '#9aa0a6',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span style={{ fontSize: '16px' }}>⚡</span>
+              <span>
+                Заявка поступит администраторам. После одобрения официальный чек на <b>${amount || '0'} USDT</b> моментально придёт вам в личные сообщения этого бота!
+              </span>
+            </div>
+          )}
 
           {/* Wallet Address Input for TRC-20 and Gram/TON */}
           {(paymentMethod === 'usdt_trc20' || paymentMethod === 'gram_ton') && (
@@ -205,11 +254,13 @@ export default function WithdrawModal() {
             onClick={handleWithdraw}
           >
             {isSubmitting ? 'Отправка заявки...' : (
-              paymentMethod === 'usdt_trc20' 
-                ? 'Запросить вывод на USDT TRC-20' 
-                : paymentMethod === 'gram_ton' 
-                  ? 'Запросить вывод на Gram (TON)' 
-                  : 'Вывести средства через CryptoBot'
+              paymentMethod === 'cryptobot'
+                ? `Запросить чек CryptoBot ($${amount})`
+                : paymentMethod === 'xrocket'
+                  ? `Запросить чек xRocket ($${amount})`
+                  : paymentMethod === 'usdt_trc20' 
+                    ? 'Запросить вывод на USDT TRC-20' 
+                    : 'Запросить вывод на Gram (TON)'
             )}
           </button>
         </div>

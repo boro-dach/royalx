@@ -43,6 +43,7 @@ export default function AdminModal() {
   const [promoType, setPromoType] = useState('balance'); // 'balance' | 'deposit_bonus'
   const [promoAmount, setPromoAmount] = useState('50');
   const [promoMaxUses, setPromoMaxUses] = useState('100');
+  const [promoMinTurnover, setPromoMinTurnover] = useState('0');
 
   // Database Management State
   const [dbStats, setDbStats] = useState({
@@ -367,6 +368,7 @@ export default function AdminModal() {
     const amt = parseFloat(promoAmount) || 10;
     const clean = promoCode.trim().toUpperCase();
     const maxUses = parseInt(promoMaxUses, 10) || 100;
+    const minTurn = Math.max(0, parseFloat(promoMinTurnover) || 0);
     addPromocode({
       id: String(Date.now()),
       code: clean,
@@ -375,6 +377,7 @@ export default function AdminModal() {
       percent: amt,
       usesLeft: maxUses,
       maxUses: maxUses,
+      minTurnover: minTurn,
       active: true
     });
     fetch('/api/promocodes/create', {
@@ -385,10 +388,12 @@ export default function AdminModal() {
         type: promoType,
         amount: amt,
         percent: amt,
-        maxUses: maxUses
+        maxUses: maxUses,
+        minTurnover: minTurn
       })
     }).catch(() => {});
     setPromoCode('');
+    setPromoMinTurnover('0');
   };
 
   const handleVerifyPin = (e) => {
@@ -1473,15 +1478,26 @@ export default function AdminModal() {
                           onChange={e => setPromoAmount(e.target.value)}
                         />
                       </div>
-                      <div style={{ flex: '1 1 90px' }}>
+                      <div style={{ flex: '1 1 85px' }}>
                         <input 
                           type="number"
                           className="promo-input"
                           style={{ width: '100%', padding: '10px 14px' }}
-                          placeholder="Лимит акт."
+                          placeholder="Лимит"
                           title="Количество активаций"
                           value={promoMaxUses}
                           onChange={e => setPromoMaxUses(e.target.value)}
+                        />
+                      </div>
+                      <div style={{ flex: '1 1 95px' }}>
+                        <input 
+                          type="number"
+                          className="promo-input"
+                          style={{ width: '100%', padding: '10px 14px' }}
+                          placeholder="Оборот $"
+                          title="Минимальный оборот ставок для активации ($) (0 = без ограничений)"
+                          value={promoMinTurnover}
+                          onChange={e => setPromoMinTurnover(e.target.value)}
                         />
                       </div>
                       <button 
@@ -1501,6 +1517,7 @@ export default function AdminModal() {
                         <tr>
                           <th>Код</th>
                           <th>Тип & Бонус</th>
+                          <th>Мин. оборот</th>
                           <th>Активаций</th>
                           <th>Удалить</th>
                         </tr>
@@ -1509,6 +1526,7 @@ export default function AdminModal() {
                         {promocodes.map(p => {
                           const isDepBonus = p.type === 'deposit_bonus';
                           const val = isDepBonus ? `+${p.percent || p.amount}% к депу` : `$${parseFloat(p.amount || 0).toFixed(2)}`;
+                          const minTurn = parseFloat(p.minTurnover || 0);
                           return (
                             <tr key={p.id}>
                               <td style={{ fontWeight: 600, color: '#ffffff' }}>{p.code}</td>
@@ -1523,6 +1541,22 @@ export default function AdminModal() {
                                 }}>
                                   {val}
                                 </span>
+                              </td>
+                              <td>
+                                {minTurn > 0 ? (
+                                  <span style={{
+                                    padding: '2px 6px',
+                                    borderRadius: '5px',
+                                    fontSize: '11px',
+                                    fontWeight: '600',
+                                    background: 'rgba(255, 170, 0, 0.15)',
+                                    color: '#ffaa00'
+                                  }}>
+                                    от ${minTurn.toFixed(0)}
+                                  </span>
+                                ) : (
+                                  <span style={{ fontSize: '11px', color: '#8a8f99' }}>Любой</span>
+                                )}
                               </td>
                               <td style={{ fontSize: '11px', color: '#8a8f99' }}>
                                 {p.usesLeft !== undefined ? `${p.usesLeft} / ${p.maxUses || 100}` : 'Активен'}

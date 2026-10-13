@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import confetti from 'canvas-confetti';
 import { useApp } from '../../context/AppContext';
 import { bjAudio } from '../../utils/blackjackAudio';
 import { CloseIcon, TetherIcon } from '../common/Icons';
@@ -116,6 +117,21 @@ export default function DiceGame({ onBack }) {
   const [isBetModalOpen, setIsBetModalOpen] = useState(false);
   const [isClosingBetModal, setIsClosingBetModal] = useState(false);
 
+  // Result Box State (Matching Mines)
+  const [showResultBox, setShowResultBox] = useState(false);
+  const [isClosingResultBox, setIsClosingResultBox] = useState(false);
+  const [resultBoxData, setResultBoxData] = useState({ isWin: false, amount: 0, mult: 1 });
+  const resultBoxTimerRef = useRef(null);
+
+  const dismissResultBox = () => {
+    if (resultBoxTimerRef.current) clearTimeout(resultBoxTimerRef.current);
+    setIsClosingResultBox(true);
+    setTimeout(() => {
+      setShowResultBox(false);
+      setIsClosingResultBox(false);
+    }, 200);
+  };
+
   const historyBarRef = useRef(null);
 
   // Auto-scroll history so newest result on left is always visible
@@ -147,6 +163,7 @@ export default function DiceGame({ onBack }) {
 
   const openBetModal = () => {
     if (isRolling) return;
+    dismissResultBox();
     setIsBetModalOpen(true);
   };
 
@@ -259,7 +276,25 @@ export default function DiceGame({ onBack }) {
         multiplier
       });
       bjAudio.playWin();
-      showToast(`🎉 Выпало ${sum}! Выигрыш +$${winAmt.toFixed(2)} (x${multiplier})!`);
+      setResultBoxData({
+        isWin: true,
+        amount: winAmt,
+        mult: multiplier
+      });
+      setIsClosingResultBox(false);
+      setShowResultBox(true);
+      if (resultBoxTimerRef.current) clearTimeout(resultBoxTimerRef.current);
+      resultBoxTimerRef.current = setTimeout(dismissResultBox, 2600);
+      try {
+        confetti({
+          particleCount: 55,
+          spread: 70,
+          startVelocity: 28,
+          origin: { y: 0.55 },
+          colors: ['#00e699', '#38ef7d', '#00ffc8', '#ffffff', '#ffd200'],
+          zIndex: 999999
+        });
+      } catch (e) {}
     } else {
       recordGameBet({
         game: 'Dice',
@@ -270,7 +305,15 @@ export default function DiceGame({ onBack }) {
       });
       bjAudio.playLose();
       processBetForCashback(betAmount);
-      showToast(`❌ Выпало ${sum}. Удачи в следующем броске!`, true);
+      setResultBoxData({
+        isWin: false,
+        amount: betAmount,
+        mult: 0
+      });
+      setIsClosingResultBox(false);
+      setShowResultBox(true);
+      if (resultBoxTimerRef.current) clearTimeout(resultBoxTimerRef.current);
+      resultBoxTimerRef.current = setTimeout(dismissResultBox, 2600);
     }
     processBetForPass(betAmount, `dice_${Date.now()}`);
   };
@@ -374,6 +417,25 @@ export default function DiceGame({ onBack }) {
               </div>
             </div>
           </div>
+
+          {/* Central Result Box (Win or Loss like in Mines) */}
+          {showResultBox && !isBetModalOpen && (
+            <div
+              className={`mines-win-box ${resultBoxData.isWin ? 'win' : 'loss'} ${isClosingResultBox ? 'closing' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                dismissResultBox();
+              }}
+            >
+              <span className="mines-win-label">{resultBoxData.isWin ? 'Выигрыш' : 'Проигрыш'}</span>
+              <span className="mines-win-value">
+                {resultBoxData.isWin ? `+$${resultBoxData.amount.toFixed(2)}` : `-$${resultBoxData.amount.toFixed(2)}`}
+              </span>
+              <span className="mines-win-multiplier">
+                {resultBoxData.isWin ? `x${Number(resultBoxData.mult.toFixed(2))}` : '0.00x'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* History Pills Bar: Clean minimalist capsules with subtle borders */}

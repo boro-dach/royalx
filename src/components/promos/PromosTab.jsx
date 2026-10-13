@@ -7,6 +7,9 @@ export default function PromosTab() {
   const rankInfo = getCurrentRankInfo ? getCurrentRankInfo() : null;
   const current = rankInfo?.current || { cashbackPercent: 2.0, fullName: 'Бронза' };
 
+  // Cashback can only be claimed on Fridays (Day 5: 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat)
+  const isFriday = new Date().getDay() === 5;
+
   return (
     <div className="main-content promos-container">
       {/* Main Cashback Card */}
@@ -15,8 +18,17 @@ export default function PromosTab() {
           <span className="cashback-badge-green">
             {current.cashbackPercent}% КЭШБЭК
           </span>
-          <span className="cashback-date-text">
-            Авто-накопление
+          <span 
+            className="cashback-date-text" 
+            style={{ 
+              color: isFriday ? '#00e699' : '#ffb703', 
+              fontWeight: '700',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}
+          >
+            {isFriday ? '🟢 Вывод открыт (Пятница)' : '📅 Вывод только по пятницам'}
           </span>
         </div>
 
@@ -25,7 +37,7 @@ export default function PromosTab() {
             Кэшбэк до 8% с проигрышей
           </div>
           <div className="cashback-card-subtext">
-            Ваш текущий ранг: {current.fullName} ({current.cashbackPercent}% кэшбэк)
+            Ваш текущий ранг: {current.fullName} ({current.cashbackPercent}% кэшбэк) • Выплата каждую пятницу 24/7
           </div>
         </div>
 
@@ -39,17 +51,23 @@ export default function PromosTab() {
               <TetherIcon size={20} />
               {accumulatedCashback.toFixed(2)}
             </div>
-            <div style={{ fontSize: '11px', color: '#8c93a8', marginTop: '2px', fontWeight: '500' }}>
-              Мин. вывод: 1.00 USDT
+            <div style={{ fontSize: '11px', color: '#8c93a8', marginTop: '3px', fontWeight: '500' }}>
+              Мин. вывод: 1.00 USDT • <span style={{ color: isFriday ? '#00e699' : '#e0a96d', fontWeight: '700' }}>
+                {isFriday ? 'Доступно сегодня!' : 'Только по пятницам'}
+              </span>
             </div>
           </div>
 
           <button 
             className="cashback-claim-btn-main"
             onClick={claimCashback}
-            disabled={accumulatedCashback < 1}
+            disabled={!isFriday || accumulatedCashback < 1}
+            style={{
+              opacity: (!isFriday || accumulatedCashback < 1) ? 0.6 : 1,
+              cursor: (!isFriday || accumulatedCashback < 1) ? 'not-allowed' : 'pointer'
+            }}
           >
-            Забрать
+            {isFriday ? 'Забрать' : 'Только в пятницу'}
           </button>
         </div>
       </div>
@@ -97,7 +115,7 @@ export default function PromosTab() {
               <span className="cashback-rule-bullet-dot" />
             </div>
             <div className="cashback-rule-text">
-              Вывод накопившегося кэшбэка доступен от <span className="cashback-rule-highlight">1.00 USDT</span> без вейджера прямо на баланс
+              Вывод накопившегося кэшбэка доступен от <span className="cashback-rule-highlight">1.00 USDT</span> без вейджера прямо на баланс <span className="cashback-rule-highlight" style={{ color: '#00e699', fontWeight: '800' }}>ТОЛЬКО ПО ПЯТНИЦАМ</span> (каждую пятницу круглосуточно)
             </div>
           </div>
         </div>

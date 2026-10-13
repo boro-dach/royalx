@@ -6,300 +6,317 @@ import confetti from 'canvas-confetti';
 import GameHeader from './GameHeader';
 import './Games.css';
 
-// Color palettes tailored to the gift boxes
-export const BOX_THEMES = {
-  pink: {
-    bg: 'linear-gradient(180deg, #df2e84 0%, #aa145e 100%)',
-    border: '#f472b6',
-    boxFront: '#e12b82',
-    boxSide: '#b91363',
-    boxTop: '#f472b6',
-    lidFront: '#f783c2',
-    lidSide: '#cb1770',
-    lidTop: '#fce7f3',
-    ribbon: '#ffffff',
-    ribbonSide: '#fbcfe8',
-    bow: '#ffffff',
-    bowStroke: '#f472b6',
-    emblem: 'clover',
-    emblemColor: '#fbcfe8'
-  },
-  blue: {
-    bg: 'linear-gradient(180deg, #0284c7 0%, #034f7c 100%)',
-    border: '#38bdf8',
-    boxFront: '#0284c7',
-    boxSide: '#0369a1',
-    boxTop: '#38bdf8',
-    lidFront: '#38bdf8',
-    lidSide: '#0275b1',
-    lidTop: '#bae6fd',
-    ribbon: '#0b3b5b',
-    ribbonSide: '#082f49',
-    bow: '#0284c7',
-    bowStroke: '#075985',
-    emblem: 'clover',
-    emblemColor: '#38bdf8'
-  },
-  green: {
-    bg: 'linear-gradient(180deg, #4dae1d 0%, #2f730c 100%)',
-    border: '#84cc16',
-    boxFront: '#52b71e',
-    boxSide: '#3d9113',
-    boxTop: '#86efac',
-    lidFront: '#86efac',
-    lidSide: '#439e17',
-    lidTop: '#dcfce7',
-    ribbon: '#ffffff',
-    ribbonSide: '#d9f99d',
-    bow: '#ffffff',
-    bowStroke: '#65a30d',
-    emblem: 'clover',
-    emblemColor: '#84cc16'
-  },
-  bronze: {
-    bg: 'linear-gradient(180deg, #d27961 0%, #994732 100%)',
-    border: '#fca5a5',
-    boxFront: '#d27961',
-    boxSide: '#b25842',
-    boxTop: '#fca5a5',
-    lidFront: '#fca5a5',
-    lidSide: '#be634c',
-    lidTop: '#ffe4e6',
-    ribbon: '#ffffff',
-    ribbonSide: '#ffedd5',
-    bow: '#ffffff',
-    bowStroke: '#ea580c',
-    emblem: 'tag',
-    emblemColor: '#fed7aa'
-  },
-  silver: {
-    bg: 'linear-gradient(180deg, #8a959f 0%, #59646e 100%)',
-    border: '#cbd5e1',
-    boxFront: '#8a959f',
-    boxSide: '#6d7882',
-    boxTop: '#cbd5e1',
-    lidFront: '#cbd5e1',
-    lidSide: '#78848e',
-    lidTop: '#f1f5f9',
-    ribbon: '#ffffff',
-    ribbonSide: '#e2e8f0',
-    bow: '#ffffff',
-    bowStroke: '#94a3b8',
-    emblem: 'tag',
-    emblemColor: '#cbd5e1'
-  },
-  gold: {
-    bg: 'linear-gradient(180deg, #d8a834 0%, #9a7211 100%)',
-    border: '#fde047',
-    boxFront: '#d8a834',
-    boxSide: '#b8891f',
-    boxTop: '#fde047',
-    lidFront: '#fde047',
-    lidSide: '#c19223',
-    lidTop: '#fef9c3',
-    ribbon: '#ffffff',
-    ribbonSide: '#fef08a',
-    bow: '#ffffff',
-    bowStroke: '#ca8a04',
-    emblem: 'tag',
-    emblemColor: '#fde047'
-  }
-};
+import homelessBanner from '../../assets/boxes/homeless.png';
+import schoolBanner from '../../assets/boxes/school.png';
+import studentBanner from '../../assets/boxes/student.png';
+import richBanner from '../../assets/boxes/rich.png';
+import oligarchBanner from '../../assets/boxes/oligarch.png';
+import millionaireBanner from '../../assets/boxes/millionaire.png';
 
-// 3D Isometric Gift Box Component
-export function GiftBox3D({ theme = 'pink', size = 84 }) {
-  const t = BOX_THEMES[theme] || BOX_THEMES.pink;
-  const isTag = t.emblem === 'tag';
+// Teal Diamond Badge Icon (matching user's badge)
+export function GemBadgeIcon({ size = 16 }) {
+  return (
+    <span
+      className="box-gem-badge"
+      style={{
+        width: `${size}px`,
+        height: `${size}px`,
+        minWidth: `${size}px`,
+        minHeight: `${size}px`,
+        borderRadius: '50%',
+        background: '#00a89d',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3)',
+        flexShrink: 0
+      }}
+    >
+      <svg width={Math.round(size * 0.62)} height={Math.round(size * 0.62)} viewBox="0 0 24 24" fill="none">
+        <path d="M6 3L2 9L12 21L22 9L18 3H6Z" fill="#ffffff" fillOpacity="0.32" stroke="#ffffff" strokeWidth="2.2" strokeLinejoin="round" />
+        <path d="M2 9H22" stroke="#ffffff" strokeWidth="2" />
+        <path d="M12 21L7.5 9L10 3" stroke="#ffffff" strokeWidth="1.8" />
+        <path d="M12 21L16.5 9L14 3" stroke="#ffffff" strokeWidth="1.8" />
+      </svg>
+    </span>
+  );
+}
+
+// 100% Crisp Vector 3D Gift Box SVG Component
+export function GlossyGiftBoxSVG({ box, size = 76 }) {
+  if (!box) return null;
+  const b = box;
+  const h = Math.round(size * 0.88);
 
   return (
-    <svg 
-      width={size} 
-      height={Math.round(size * 0.9)} 
-      viewBox="0 0 100 90" 
+    <svg
+      width={size}
+      height={h}
+      viewBox="0 0 100 88"
       fill="none"
-      style={{ display: 'block', margin: '0 auto', filter: 'drop-shadow(0 8px 14px rgba(0,0,0,0.45))' }}
+      style={{ display: 'block', margin: '0 auto', filter: `drop-shadow(0 6px 12px ${b.shadow || 'rgba(0,0,0,0.35)'})` }}
     >
-      {/* Soft Ground Shadow */}
-      <ellipse cx="50" cy="80" rx="34" ry="7" fill="rgba(0,0,0,0.35)" />
+      <defs>
+        <radialGradient id={`shad_${b.id}`} cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="rgba(0,0,0,0.4)" />
+          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+        </radialGradient>
+        <linearGradient id={`front_${b.id}`} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor={b.boxFront} />
+          <stop offset="100%" stopColor={b.boxSide} />
+        </linearGradient>
+        <linearGradient id={`side_${b.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor={b.boxSide} />
+          <stop offset="100%" stopColor={b.lidSide} />
+        </linearGradient>
+        <linearGradient id={`lid_${b.id}`} x1="20%" y1="0%" x2="80%" y2="100%">
+          <stop offset="0%" stopColor={b.lidTop} />
+          <stop offset="100%" stopColor={b.lidFront} />
+        </linearGradient>
+        <linearGradient id={`gloss_${b.id}`} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.55" />
+          <stop offset="100%" stopColor="#ffffff" stopOpacity="0.05" />
+        </linearGradient>
+      </defs>
 
-      {/* Main Cube Body */}
-      {/* Front-Left Face */}
-      <polygon points="18,38 50,54 50,79 18,63" fill={t.boxFront} />
-      {/* Front-Right Face */}
-      <polygon points="50,54 82,38 82,63 50,79" fill={t.boxSide} />
+      {/* Ground soft shadow */}
+      <ellipse cx="50" cy="80" rx="34" ry="6" fill={`url(#shad_${b.id})`} />
+
+      {/* Box Front-Left Face */}
+      <polygon points="18,38 50,53 50,78 18,63" fill={`url(#front_${b.id})`} />
+      {/* Box Front-Right Face */}
+      <polygon points="50,53 82,38 82,63 50,78" fill={`url(#side_${b.id})`} />
 
       {/* Vertical Ribbon Left */}
-      <polygon points="31,44 38,48 38,73 31,69" fill={t.ribbon} />
+      <polygon points="31,44 38,47 38,72 31,69" fill={b.ribbon} />
       {/* Vertical Ribbon Right */}
-      <polygon points="62,48 69,44 69,69 62,73" fill={t.ribbonSide} />
+      <polygon points="62,47 69,44 69,69 62,72" fill={b.ribbonSide} />
 
-      {/* 3D Overhanging Lid */}
-      {/* Lid Front-Left Rim */}
-      <polygon points="14,35 50,52 50,57 14,40" fill={t.lidFront} />
-      {/* Lid Front-Right Rim */}
-      <polygon points="50,52 86,35 86,40 50,57" fill={t.lidSide} />
-      {/* Lid Top Face */}
-      <polygon points="50,19 86,35 50,52 14,35" fill={t.lidTop} />
+      {/* Specular gloss highlight on front */}
+      <polygon points="20,40 29,44 29,66 20,62" fill={`url(#gloss_${b.id})`} opacity="0.4" />
+
+      {/* Overhanging Lid: Front-Left Rim */}
+      <polygon points="14,35 50,52 50,57 14,40" fill={b.lidFront} />
+      {/* Overhanging Lid: Front-Right Rim */}
+      <polygon points="50,52 86,35 86,40 50,57" fill={b.lidSide} />
+      {/* Overhanging Lid: Top Face */}
+      <polygon points="50,18 86,35 50,52 14,35" fill={`url(#lid_${b.id})`} />
 
       {/* Cross Ribbons on Lid Top */}
-      <polygon points="30,26 36,29 70,44 64,41" fill={t.ribbon} />
-      <polygon points="46,21 53,24 53,49 46,46" fill={t.ribbonSide} />
+      <polygon points="30,26 36,29 70,44 64,41" fill={b.ribbon} />
+      <polygon points="46,20 54,24 54,49 46,45" fill={b.ribbonSide} />
 
-      {/* Center Tied Bow */}
-      {/* Left Loop */}
-      <path 
-        d="M50 20 C38 8, 18 6, 24 17 C28 23, 44 22, 50 20 Z" 
-        fill={t.bow} 
-        stroke={t.bowStroke} 
-        strokeWidth="1.2" 
-      />
-      <path 
-        d="M48 19 C38 11, 26 9, 29 16 C32 19, 43 19, 48 19 Z" 
-        fill={t.bowStroke} 
-        opacity="0.35" 
-      />
+      {/* Specular highlight on Lid top */}
+      <polygon points="16,35 50,51 46,47 24,36" fill="#ffffff" opacity="0.45" />
 
-      {/* Right Loop */}
-      <path 
-        d="M50 20 C62 8, 82 6, 76 17 C72 23, 56 22, 50 20 Z" 
-        fill={t.bow} 
-        stroke={t.bowStroke} 
-        strokeWidth="1.2" 
+      {/* Fluffy Ribbon Bow Loops */}
+      {/* Left Bow Loop */}
+      <path
+        d="M50 20 C35 6, 14 5, 22 17 C26 24, 44 22, 50 20 Z"
+        fill={b.bow}
+        stroke={b.bowShadow}
+        strokeWidth="1.2"
       />
-      <path 
-        d="M52 19 C62 11, 74 9, 71 16 C68 19, 57 19, 52 19 Z" 
-        fill={t.bowStroke} 
-        opacity="0.35" 
+      <path
+        d="M48 19 C37 10, 24 9, 28 16 C31 19, 43 19, 48 19 Z"
+        fill={b.bowShadow}
+        opacity="0.5"
       />
 
-      {/* Bow Center Knot */}
-      <ellipse cx="50" cy="20.5" rx="5" ry="4.5" fill={t.bow} stroke={t.bowStroke} strokeWidth="1" />
+      {/* Right Bow Loop */}
+      <path
+        d="M50 20 C65 6, 86 5, 78 17 C74 24, 56 22, 50 20 Z"
+        fill={b.bow}
+        stroke={b.bowShadow}
+        strokeWidth="1.2"
+      />
+      <path
+        d="M52 19 C63 10, 76 9, 72 16 C69 19, 57 19, 52 19 Z"
+        fill={b.bowShadow}
+        opacity="0.5"
+      />
 
-      {/* Hanging Gift Tag or Lucky Clover */}
-      {isTag ? (
-        <g>
-          {/* Ribbon String */}
-          <line x1="50" y1="36" x2="46" y2="44" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" />
-          {/* Tag Body */}
-          <polygon points="43,44 38,50 43,56 48,50" fill={t.emblemColor} stroke="#ffffff" strokeWidth="0.9" />
-          <circle cx="44.5" cy="47" r="1.2" fill="#ffffff" />
-        </g>
-      ) : (
-        /* Lucky 4-leaf clover on front-left face */
-        <g transform="translate(34, 58) scale(0.7)">
-          <circle cx="-3.5" cy="-3.5" r="3.2" fill={t.emblemColor} />
-          <circle cx="3.5" cy="-3.5" r="3.2" fill={t.emblemColor} />
-          <circle cx="-3.5" cy="3.5" r="3.2" fill={t.emblemColor} />
-          <circle cx="3.5" cy="3.5" r="3.2" fill={t.emblemColor} />
-          <circle cx="0" cy="0" r="1.5" fill="#ffffff" opacity="0.6" />
-        </g>
-      )}
+      {/* Center Knot */}
+      <ellipse cx="50" cy="20.5" rx="5.5" ry="5" fill={b.bow} stroke={b.bowShadow} strokeWidth="1" />
+      <ellipse cx="49" cy="19.5" rx="2" ry="1.5" fill="#ffffff" opacity="0.85" />
     </svg>
   );
 }
 
-// 6 Boxes matching the gallery
+// 6 Boxes matching the gallery banners (100% Vector HTML/CSS + SVG)
 export const BOXES_CONFIG = [
   {
     id: 'homeless',
     name: 'Бомж',
     theme: 'pink',
+    image: homelessBanner,
     price: 1.0,
     minDrop: 0.25,
-    maxDrop: 5.0,
-    maxDisplay: '5',
+    maxDrop: 15.0,
+    maxDisplay: '15',
+    cardBg: 'linear-gradient(180deg, #d32882 0%, #b21b6a 100%)',
+    boxFront: '#f188c0',
+    boxSide: '#c83984',
+    lidTop: '#ffb9e1',
+    lidFront: '#fa80c1',
+    lidSide: '#c83984',
+    ribbon: '#ffffff',
+    ribbonSide: '#fde5f2',
+    bow: '#ffffff',
+    bowShadow: '#f894cb',
+    shadow: 'rgba(70, 4, 35, 0.45)',
     items: [
-      { id: 'h1', name: 'Чекушка', value: 0.25, chance: 45 },
-      { id: 'h2', name: 'Бычок', value: 0.50, chance: 26 },
-      { id: 'h3', name: 'Доширак', value: 0.80, chance: 15 },
-      { id: 'h4', name: 'Шапка', value: 1.50, chance: 8 },
-      { id: 'h5', name: 'Бутылка', value: 2.50, chance: 4.5 },
-      { id: 'h6', name: 'Клад', value: 5.00, chance: 1.5 }
+      { id: 'h1', name: '0.25 USDT', value: 0.25, chance: 42 },
+      { id: 'h2', name: '0.50 USDT', value: 0.50, chance: 25 },
+      { id: 'h3', name: '1.00 USDT', value: 1.00, chance: 15 },
+      { id: 'h4', name: '2.50 USDT', value: 2.50, chance: 10 },
+      { id: 'h5', name: '5.00 USDT', value: 5.00, chance: 6 },
+      { id: 'h6', name: '15.00 USDT', value: 15.00, chance: 2.0 }
     ]
   },
   {
     id: 'school',
     name: 'Школьник',
     theme: 'blue',
+    image: schoolBanner,
     price: 5.0,
     minDrop: 1.0,
-    maxDrop: 15.0,
-    maxDisplay: '15',
+    maxDrop: 30.0,
+    maxDisplay: '30',
+    cardBg: 'linear-gradient(180deg, #0b8cb5 0%, #06698a 100%)',
+    boxFront: '#53c0f3',
+    boxSide: '#0d89c5',
+    lidTop: '#c0e9fd',
+    lidFront: '#75d1fc',
+    lidSide: '#0d89c5',
+    ribbon: '#ffffff',
+    ribbonSide: '#e0f4fe',
+    bow: '#ffffff',
+    bowShadow: '#79d2fc',
+    shadow: 'rgba(2, 44, 66, 0.45)',
     items: [
-      { id: 's1', name: 'Пицца', value: 1.00, chance: 42 },
-      { id: 's2', name: 'Тетрадь', value: 2.00, chance: 28 },
-      { id: 's3', name: 'Шоколадка', value: 4.00, chance: 14 },
-      { id: 's4', name: 'Скин', value: 7.50, chance: 9.5 },
-      { id: 's5', name: 'Рюкзак', value: 10.00, chance: 5.0 },
-      { id: 's6', name: 'Заначка', value: 15.00, chance: 1.5 }
+      { id: 's1', name: '1.00 USDT', value: 1.00, chance: 40 },
+      { id: 's2', name: '2.50 USDT', value: 2.50, chance: 26 },
+      { id: 's3', name: '5.00 USDT', value: 5.00, chance: 16 },
+      { id: 's4', name: '10.00 USDT', value: 10.00, chance: 10 },
+      { id: 's5', name: '18.00 USDT', value: 18.00, chance: 6 },
+      { id: 's6', name: '30.00 USDT', value: 30.00, chance: 2.0 }
     ]
   },
   {
     id: 'student',
     name: 'Студент',
     theme: 'green',
+    image: studentBanner,
     price: 10.0,
     minDrop: 5.0,
-    maxDrop: 25.0,
-    maxDisplay: '25',
+    maxDrop: 50.0,
+    maxDisplay: '50',
+    cardBg: 'linear-gradient(180deg, #64af1a 0%, #478c0e 100%)',
+    boxFront: '#a5e464',
+    boxSide: '#6eb823',
+    lidTop: '#dcf9a7',
+    lidFront: '#baf373',
+    lidSide: '#6eb823',
+    ribbon: '#ffffff',
+    ribbonSide: '#f4fde4',
+    bow: '#ffffff',
+    bowShadow: '#bdf57b',
+    shadow: 'rgba(34, 62, 7, 0.45)',
     items: [
-      { id: 'st1', name: 'Кофе', value: 5.00, chance: 45 },
-      { id: 'st2', name: 'Шаурма', value: 7.00, chance: 25 },
-      { id: 'st3', name: 'Пельмени', value: 9.00, chance: 15 },
-      { id: 'st4', name: 'Зачёт', value: 14.00, chance: 9.0 },
-      { id: 'st5', name: 'Курсовая', value: 18.00, chance: 4.5 },
-      { id: 'st6', name: 'Стипендия', value: 25.00, chance: 1.5 }
+      { id: 'st1', name: '5.00 USDT', value: 5.00, chance: 42 },
+      { id: 'st2', name: '8.00 USDT', value: 8.00, chance: 25 },
+      { id: 'st3', name: '12.00 USDT', value: 12.00, chance: 16 },
+      { id: 'st4', name: '20.00 USDT', value: 20.00, chance: 9.5 },
+      { id: 'st5', name: '32.00 USDT', value: 32.00, chance: 5.5 },
+      { id: 'st6', name: '50.00 USDT', value: 50.00, chance: 2.0 }
     ]
   },
   {
     id: 'rich',
     name: 'Богатый',
     theme: 'bronze',
+    image: richBanner,
     price: 25.0,
     minDrop: 15.0,
-    maxDrop: 50.0,
-    maxDisplay: '50',
+    maxDrop: 100.0,
+    maxDisplay: '100',
+    cardBg: 'linear-gradient(180deg, #c77265 0%, #a45347 100%)',
+    boxFront: '#e79c90',
+    boxSide: '#b85f52',
+    lidTop: '#fcd3cc',
+    lidFront: '#f7aba0',
+    lidSide: '#b85f52',
+    ribbon: '#ffffff',
+    ribbonSide: '#feeeeb',
+    bow: '#ffffff',
+    bowShadow: '#f8b4ab',
+    shadow: 'rgba(64, 23, 17, 0.45)',
     items: [
-      { id: 'r1', name: 'Десерт', value: 15.00, chance: 46 },
-      { id: 'r2', name: 'Кошелёк', value: 20.00, chance: 26 },
-      { id: 'r3', name: 'Ресторан', value: 24.00, chance: 13 },
-      { id: 'r4', name: 'Запонки', value: 35.00, chance: 9.0 },
-      { id: 'r5', name: 'Часы', value: 42.00, chance: 4.5 },
-      { id: 'r6', name: 'Слиток', value: 50.00, chance: 1.5 }
+      { id: 'r1', name: '15.00 USDT', value: 15.00, chance: 44 },
+      { id: 'r2', name: '22.00 USDT', value: 22.00, chance: 25 },
+      { id: 'r3', name: '35.00 USDT', value: 35.00, chance: 15 },
+      { id: 'r4', name: '55.00 USDT', value: 55.00, chance: 9 },
+      { id: 'r5', name: '75.00 USDT', value: 75.00, chance: 5 },
+      { id: 'r6', name: '100.00 USDT', value: 100.00, chance: 2.0 }
     ]
   },
   {
     id: 'oligarch',
     name: 'Олигарх',
     theme: 'silver',
+    image: oligarchBanner,
     price: 50.0,
     minDrop: 25.0,
-    maxDrop: 100.0,
-    maxDisplay: '100',
+    maxDrop: 250.0,
+    maxDisplay: '250',
+    cardBg: 'linear-gradient(180deg, #878c90 0%, #63686d 100%)',
+    boxFront: '#cbd3d8',
+    boxSide: '#929ca3',
+    lidTop: '#f4f6f8',
+    lidFront: '#dce1e5',
+    lidSide: '#929ca3',
+    ribbon: '#ffffff',
+    ribbonSide: '#f6f8fa',
+    bow: '#ffffff',
+    bowShadow: '#dfe4e8',
+    shadow: 'rgba(23, 27, 30, 0.45)',
     items: [
-      { id: 'o1', name: 'AirPods Max', value: 25.00, chance: 46 },
-      { id: 'o2', name: 'iPhone 16', value: 35.00, chance: 25 },
-      { id: 'o3', name: 'Золотой слиток', value: 50.00, chance: 14 },
-      { id: 'o4', name: 'Rolex Sub', value: 70.00, chance: 9.5 },
-      { id: 'o5', name: 'Криптокошелек', value: 85.00, chance: 3.5 },
-      { id: 'o6', name: 'Чек на 100', value: 100.00, chance: 2.0 }
+      { id: 'o1', name: '25.00 USDT', value: 25.00, chance: 44 },
+      { id: 'o2', name: '45.00 USDT', value: 45.00, chance: 25 },
+      { id: 'o3', name: '80.00 USDT', value: 80.00, chance: 15 },
+      { id: 'o4', name: '130.00 USDT', value: 130.00, chance: 9 },
+      { id: 'o5', name: '180.00 USDT', value: 180.00, chance: 5 },
+      { id: 'o6', name: '250.00 USDT', value: 250.00, chance: 2.0 }
     ]
   },
   {
     id: 'millionaire',
     name: 'Миллионер',
     theme: 'gold',
+    image: millionaireBanner,
     price: 100.0,
     minDrop: 50.0,
-    maxDrop: 250.0,
-    maxDisplay: '250',
+    maxDrop: 500.0,
+    maxDisplay: '500',
+    cardBg: 'linear-gradient(180deg, #dfa91b 0%, #b58308 100%)',
+    boxFront: '#f6cb49',
+    boxSide: '#ca9612',
+    lidTop: '#feefa2',
+    lidFront: '#fedd63',
+    lidSide: '#ca9612',
+    ribbon: '#ffffff',
+    ribbonSide: '#fffce8',
+    bow: '#ffffff',
+    bowShadow: '#fedf6d',
+    shadow: 'rgba(66, 47, 3, 0.45)',
     items: [
-      { id: 'm1', name: 'Сигары VIP', value: 50.00, chance: 46 },
-      { id: 'm2', name: 'Шампанское Dom', value: 75.00, chance: 25 },
-      { id: 'm3', name: 'Слиток 100г', value: 100.00, chance: 13 },
-      { id: 'm4', name: 'Бриллиант 2ct', value: 150.00, chance: 9.5 },
-      { id: 'm5', name: 'Спорткар', value: 200.00, chance: 4.5 },
-      { id: 'm6', name: 'Джекпот RoyalX', value: 250.00, chance: 2.0 }
+      { id: 'm1', name: '50.00 USDT', value: 50.00, chance: 44 },
+      { id: 'm2', name: '90.00 USDT', value: 90.00, chance: 25 },
+      { id: 'm3', name: '150.00 USDT', value: 150.00, chance: 15 },
+      { id: 'm4', name: '240.00 USDT', value: 240.00, chance: 9 },
+      { id: 'm5', name: '350.00 USDT', value: 350.00, chance: 5 },
+      { id: 'm6', name: '500.00 USDT', value: 500.00, chance: 2.0 }
     ]
   }
 ];
@@ -542,6 +559,7 @@ export default function BoxesGame({ onBack }) {
           particleCount: 55,
           spread: 75,
           origin: { y: 0.55 },
+          zIndex: 999999,
           colors: ['#00e699', '#00ffc8', '#ffffff']
         });
       } catch (e) {}
@@ -549,7 +567,6 @@ export default function BoxesGame({ onBack }) {
       try { bjAudio.playChip(); } catch (e) {}
     }
 
-    showToast(`🎉 Зачислено: +${totalWon.toFixed(2)} USDT на баланс!`);
     setShowResultModal(true);
   };
 
@@ -590,32 +607,20 @@ export default function BoxesGame({ onBack }) {
               {BOXES_CONFIG.map(box => (
                 <div
                   key={box.id}
-                  className={`gift-box-card ${box.theme}`}
+                  className="gift-box-card"
                   onClick={() => handleSelectBox(box)}
                 >
-                  {/* Subtle Festive Pattern */}
-                  <div className="gift-card-snowflakes" />
-
-                  {/* Speech Bubble Pill on top */}
-                  <div className="gift-speech-bubble">
-                    <span>до</span>
-                    <TetherIcon size={12} />
-                    <span>{box.maxDisplay}</span>
-                  </div>
-
-                  {/* 3D Gift Box Center (Larger size 84) */}
-                  <div className="gift-box-wrapper">
-                    <GiftBox3D theme={box.theme} size={84} />
-                  </div>
-
-                  {/* Bottom Price: Icon BEFORE Amount */}
-                  <div className="gift-card-price-row">
-                    <TetherIcon size={16} />
-                    <span className="gift-card-price-num">{box.price}</span>
-                  </div>
-
-                  {/* Box Name Tag */}
+                  <img
+                    src={box.image}
+                    alt={box.name}
+                    className="gift-box-banner-img"
+                    loading="lazy"
+                  />
                   <div className="gift-card-box-name">{box.name}</div>
+                  <div className="gift-card-box-price">
+                    <TetherIcon size={12} />
+                    <span>{box.price.toFixed(2)} USDT</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -667,11 +672,10 @@ export default function BoxesGame({ onBack }) {
                         key={item.uniqueKey || `it_${rIdx}_${idx}`}
                         className={`rx-reel-item-card ${boxCount > 1 ? 'compact-multi' : ''}`}
                       >
-                        <GiftBox3D theme={selectedBox.theme} size={boxCount === 3 ? 32 : boxCount === 2 ? 36 : 42} />
+                        <div className={`rx-reel-tether-icon-box ${boxCount > 1 ? 'compact-multi' : ''}`}>
+                          <TetherIcon size={boxCount > 1 ? 30 : 42} />
+                        </div>
                         <span className="rx-reel-item-name">{item.name}</span>
-                        <span className="rx-reel-item-val" style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                          <TetherIcon size={boxCount > 1 ? 11 : 13} /> {item.value.toFixed(2)}
-                        </span>
                       </div>
                     ))}
                   </div>
@@ -749,12 +753,12 @@ export default function BoxesGame({ onBack }) {
               </div>
               <div className="rx-box-drops-grid">
                 {selectedBox.items.map(item => (
-                  <div key={item.id} className="rx-drop-chip">
-                    <span className="rx-drop-chip-name">{item.name}</span>
-                    <span className="rx-drop-chip-val" style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                      <TetherIcon size={12} /> {item.value.toFixed(2)}
-                    </span>
-                    <span className="rx-drop-chip-chance">{item.chance}%</span>
+                  <div key={item.id} className="rx-drop-card">
+                    <span className="rx-drop-chance-tag">{item.chance}%</span>
+                    <div className="rx-drop-tether-icon-box">
+                      <TetherIcon size={38} />
+                    </div>
+                    <span className="rx-drop-card-val">{item.name}</span>
                   </div>
                 ))}
               </div>
@@ -784,11 +788,11 @@ export default function BoxesGame({ onBack }) {
               {wonItems.length === 1 ? (
                 <div className="rx-win-body">
                   <div className="rx-win-icon-wrapper">
-                    <GiftBox3D theme={selectedBox.theme} size={70} />
+                    <TetherIcon size={64} />
                   </div>
                   <div className="rx-win-item-label">{wonItems[0].name}</div>
-                  <div className="rx-win-amount" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-                    +<TetherIcon size={20} /> {wonItems[0].value.toFixed(2)}
+                  <div className="rx-win-amount" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    +<TetherIcon size={20} /> {wonItems[0].name}
                   </div>
                 </div>
               ) : (
@@ -796,10 +800,12 @@ export default function BoxesGame({ onBack }) {
                   <div className="rx-win-multi-cards">
                     {wonItems.map((item, idx) => (
                       <div key={idx} className="rx-win-mini-card">
-                        <GiftBox3D theme={selectedBox.theme} size={44} />
+                        <div className="rx-win-mini-tether-icon">
+                          <TetherIcon size={28} />
+                        </div>
                         <div className="rx-win-mini-name">{item.name}</div>
                         <div className="rx-win-mini-val">
-                          +<TetherIcon size={13} /> {item.value.toFixed(2)}
+                          +<TetherIcon size={13} /> {item.name}
                         </div>
                       </div>
                     ))}
@@ -807,7 +813,7 @@ export default function BoxesGame({ onBack }) {
                   <div className="rx-win-total-badge">
                     <span>Общий выигрыш:</span>
                     <span className="rx-win-total-num">
-                      +<TetherIcon size={18} /> {wonItems.reduce((s, it) => s + it.value, 0).toFixed(2)}
+                      +<TetherIcon size={18} /> {wonItems.reduce((s, it) => s + it.value, 0).toFixed(2)} USDT
                     </span>
                   </div>
                 </div>

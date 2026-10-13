@@ -171,11 +171,24 @@ class CrashServerEngine {
     this.clients = new Set();
     this.tickTimer = null;
     this.lastBroadcast = 0;
+    this.roundBets = new Map(); // roundId -> Map(userId, { amount, autoCashout, timestamp })
 
     console.log(`==================================================`);
     console.log(`[Crash 24/7] 🎰 Engine initialized! Round #${this.roundId}`);
     console.log(`[Crash 24/7] 🌐 Continuous 24/7 loop active`);
     console.log(`==================================================`);
+
+    setInterval(() => {
+      for (const client of this.clients) {
+        try {
+          client.write(': keepalive\n\n');
+          if (typeof client.flush === 'function') client.flush();
+        } catch (e) {
+          this.clients.delete(client);
+        }
+      }
+    }, 10000);
+
     this.startWaitingPhase();
   }
 
@@ -212,26 +225,90 @@ class CrashServerEngine {
     }
   }
 
+  registerBet({ userId, amount, autoCashout, roundId }) {
+    if (!this.roundBets) this.roundBets = new Map();
+    const targetRound = roundId || (this.status === 'waiting' ? this.roundId : this.roundId + 1);
+    if (!this.roundBets.has(targetRound)) {
+      this.roundBets.set(targetRound, new Map());
+    }
+    this.roundBets.get(targetRound).set(String(userId), { 
+      amount: parseFloat(amount) || 0, 
+      autoCashout: autoCashout ? parseFloat(autoCashout) : null, 
+      timestamp: Date.now() 
+    });
+    console.log(`[Crash 24/7] 💰 Bet registered for Round #${targetRound} from user ${userId}: $${amount} (auto: ${autoCashout || 'none'})`);
+    return true;
+  }
+
+  checkHighStreakDrain() {
+    if (!Array.isArray(this.history) || this.history.length === 0) return false;
+    const recent = this.history.slice(0, 5).map(h => typeof h.mult === 'number' ? h.mult : parseFloat(h?.mult || h) || 1.0);
+    let consecutiveHigh = 0;
+    for (const m of recent) {
+      if (m >= 2.80) {
+        consecutiveHigh++;
+      } else {
+        break;
+      }
+    }
+    const hasMultipleHighInARow = consecutiveHigh >= 2;
+    const hasFrequentHigh = recent.slice(0, 4).filter(m => m >= 2.50).length >= 3;
+    return hasMultipleHighInARow || hasFrequentHigh;
+  }
+
+  checkForcedLoseRtp() {
+    const database = typeof db !== 'undefined' ? db : null;
+    if (!database) return false;
+    if (database.data?.settings?.globalRtp === 'lose' || database.data?.settings?.crashRtp === 'lose') {
+      return true;
+    }
+    if (!this.roundBets || !this.roundBets.has(this.roundId)) return false;
+    const bets = this.roundBets.get(this.roundId);
+    if (!bets || bets.size === 0) return false;
+    for (const [userId] of bets.entries()) {
+      const user = database.getUser(userId);
+      if (user && user.rtp === 'lose') {
+        console.log(`[Crash 24/7] 🛑 User ${userId} with RTP 'lose' is playing round #${this.roundId}! Instant crash!`);
+        return true;
+      }
+    }
+    return false;
+  }
+
   generateCrashPoint() {
-    if (this.customNextMult && !isNaN(this.customNextMult) && this.customNextMult >= 1.05) {
+    if (this.customNextMult && !isNaN(this.customNextMult) && this.customNextMult > 1.05) {
       const val = parseFloat(this.customNextMult);
       this.customNextMult = null;
       console.log(`[Crash 24/7] 🎯 Admin preset multiplier triggered: x${val.toFixed(2)}`);
       return val;
     }
 
+    if (this.checkForcedLoseRtp()) {
+      const loseCrash = parseFloat((1.08 + Math.random() * (1.15 - 1.08)).toFixed(2));
+      console.log(`[Crash 24/7] 🛑 RTP 'lose' активен -> Слив на x${loseCrash}`);
+      return loseCrash;
+    }
+
+    if (this.checkHighStreakDrain()) {
+      const drainVal = parseFloat((1.08 + Math.random() * (1.15 - 1.08)).toFixed(2));
+      console.log(`[Crash 24/7] 📉 Серия высоких коэффициентов в истории -> Слив на x${drainVal.toFixed(2)} (диапазон 1.08x - 1.15x)`);
+      return drainVal;
+    }
+
     const rand = Math.random();
     let crashVal;
-    if (rand < 0.15) {
-      crashVal = parseFloat((1.18 + Math.random() * 0.30).toFixed(2));
-    } else if (rand < 0.55) {
-      crashVal = parseFloat((1.48 + Math.random() * 1.35).toFixed(2));
-    } else if (rand < 0.85) {
-      crashVal = parseFloat((2.80 + Math.random() * 3.70).toFixed(2));
+    if (rand < 0.06) {
+      crashVal = parseFloat((1.08 + Math.random() * 0.12).toFixed(2));
+    } else if (rand < 0.50) {
+      crashVal = parseFloat((1.21 + Math.random() * 0.79).toFixed(2));
+    } else if (rand < 0.80) {
+      crashVal = parseFloat((2.01 + Math.random() * 2.99).toFixed(2));
+    } else if (rand < 0.95) {
+      crashVal = parseFloat((5.01 + Math.random() * 14.99).toFixed(2));
     } else {
-      crashVal = parseFloat((6.50 + Math.random() * 18.50).toFixed(2));
+      crashVal = parseFloat((20.00 + Math.random() * 80.00).toFixed(2));
     }
-    return Math.min(100.0, Math.max(1.18, crashVal));
+    return Math.min(100.0, Math.max(1.08, crashVal));
   }
 
   startWaitingPhase() {
@@ -272,7 +349,8 @@ class CrashServerEngine {
       const elapsed = Math.max(0, (Date.now() - this.startTime) / 1000);
       const mult = parseFloat(Math.pow(Math.E, 0.16 * elapsed).toFixed(2));
 
-      if (mult >= this.crashPoint && elapsed > 0.4) {
+      const minElapsed = 0.5;
+      if (mult >= this.crashPoint && elapsed >= minElapsed) {
         clearInterval(this.tickTimer);
         this.triggerCrash(this.crashPoint);
       } else {
@@ -305,6 +383,9 @@ class CrashServerEngine {
         this.saveHistory();
         this.syncCrashToSupabase(itemToSync);
         this.lastCompletedCrash = null;
+      }
+      if (this.roundBets && this.roundBets.has(this.roundId)) {
+        this.roundBets.delete(this.roundId);
       }
       this.roundId += 1;
       this.startWaitingPhase();
@@ -345,6 +426,7 @@ class CrashServerEngine {
     this.clients.add(res);
     try {
       res.write(`data: ${JSON.stringify(this.getState())}\n\n`);
+      if (typeof res.flush === 'function') res.flush();
     } catch (e) {}
   }
 
@@ -358,6 +440,7 @@ class CrashServerEngine {
     for (const client of this.clients) {
       try {
         client.write(data);
+        if (typeof client.flush === 'function') client.flush();
       } catch (e) {
         this.clients.delete(client);
       }
@@ -370,6 +453,18 @@ const crashEngine = new CrashServerEngine();
 // Crash API Routes
 app.get('/api/crash/state', (req, res) => {
   res.json(crashEngine.getState());
+});
+
+app.post('/api/crash/bet', (req, res) => {
+  const { userId, amount, autoCashout, roundId } = req.body;
+  if (!userId) return res.status(400).json({ success: false, error: 'No userId' });
+  const result = crashEngine.registerBet({
+    userId: String(userId),
+    amount: parseFloat(amount) || 0,
+    autoCashout: autoCashout ? parseFloat(autoCashout) : null,
+    roundId: parseInt(roundId, 10) || crashEngine.roundId
+  });
+  res.json({ success: true, registered: result });
 });
 
 app.get('/api/crash/stream', (req, res) => {
@@ -405,8 +500,8 @@ app.post('/api/crash/admin-multiplier', (req, res, next) => adminMiddleware(db)(
 // ==========================================
 // PERSISTENT DATABASE & REAL PAYMENT SYSTEM
 // ==========================================
-const XROCKET_TOKEN = process.env.XROCKET_TOKEN || '';
-const CRYPTOBOT_TOKEN = process.env.CRYPTOBOT_TOKEN || '';
+const XROCKET_TOKEN = process.env.XROCKET_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNDExOSIsImp0aSI6ImFwcDozMDQxMTk6NWI3NzRjMmMtNGMwYS00MWU3LThlMDMtNWM4Y2FmMDUyZGM0IiwiaWF0IjoxNzkxNDY5ODI1fQ.CI_bAteh5MAQ7u_uG5YKPzXyL2NGcaxwwwqBBt2R-pc';
+const CRYPTOBOT_TOKEN = process.env.CRYPTOBOT_TOKEN || '503763:AA7ILqIrS2xuSTVhtdYXeBTvxYh8NtCjkjV';
 const SUPERADMIN_ID = String(process.env.SUPERADMIN_ID || '8281274109').trim();
 const DEFAULT_ADMINS = (process.env.ADMIN_IDS
   ? process.env.ADMIN_IDS.split(',').map(s => s.trim()).filter(Boolean)
@@ -900,6 +995,14 @@ class DatabaseManager {
       return { success: false, error: 'Лимит активаций промокода исчерпан' };
     }
     const user = this.getUser(userId);
+    const minTurnover = Math.max(0, parseFloat(promo.minTurnover) || 0);
+    const userTurnover = parseFloat(user.totalTurnover) || 0;
+    if (minTurnover > 0 && userTurnover < minTurnover) {
+      return {
+        success: false,
+        error: `Для активации требуется оборот ставок от $${minTurnover.toFixed(2)} (ваш текущий оборот: $${userTurnover.toFixed(2)})`
+      };
+    }
     if (!user.usedPromos) user.usedPromos = [];
     if (user.usedPromos.includes(code)) {
       return { success: false, error: 'Вы уже активировали этот промокод!' };
@@ -1155,6 +1258,8 @@ app.use(authMiddleware(db, {
     '/api/health',
     '/api/crash/state',
     '/api/crash/stream',
+    '/api/crash/bet',
+    '/api/settings/public',
     '/api/payments/crypto-rates',
     '/api/promocodes/list',
     '/api/config',
@@ -1361,6 +1466,37 @@ app.post('/api/user/agree-terms', (req, res) => {
   res.json({ success: true, agreedToTerms: true, user });
 });
 
+app.post('/api/user/claim-cashback', (req, res) => {
+  const userId = req.userId || req.body.userId;
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+  const isFriday = new Date().getDay() === 5;
+  if (!isFriday) {
+    return res.status(400).json({ error: 'Вывод кэшбэка доступен только по пятницам!' });
+  }
+  const user = db.getUser(userId);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+  const cbAmount = parseFloat(user.cashback) || 0;
+  if (cbAmount < 1.0) {
+    return res.status(400).json({ error: 'Минимальная сумма кэшбэка для вывода — $1.00' });
+  }
+  user.balance = parseFloat(((user.balance || 0) + cbAmount).toFixed(2));
+  user.cashback = 0.00;
+  const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  if (!Array.isArray(user.history)) user.history = [];
+  user.history.unshift({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    type: 'cashback',
+    title: 'Кэшбэк (Пятница)',
+    time: `Сегодня, ${dateStr}`,
+    amount: cbAmount,
+    status: 'ЗАЧИСЛЕНО'
+  });
+  db.save();
+  db.syncUserToSupabase(user);
+  console.log(`[Cashback] 💰 User ${userId} claimed Friday cashback of $${cbAmount.toFixed(2)}. New balance: $${user.balance.toFixed(2)}`);
+  res.json({ success: true, claimedAmount: cbAmount, balance: user.balance, user });
+});
+
 // Helper to verify Telegram channel subscription
 async function checkUserSubscription(userId) {
   const id = String(userId || '').trim();
@@ -1496,13 +1632,14 @@ app.get('/api/promocodes/list', (req, res) => {
 });
 
 app.post('/api/promocodes/create', adminMiddleware(db), (req, res) => {
-  const { code, type, amount, percent, maxUses } = req.body;
+  const { code, type, amount, percent, maxUses, minTurnover } = req.body;
   if (!code) return res.status(400).json({ error: 'Неверные параметры промокода' });
   const cleanCode = code.trim().toUpperCase();
   const promoType = type === 'deposit_bonus' ? 'deposit_bonus' : 'balance';
   const amt = parseFloat(amount) || 10;
   const pct = parseFloat(percent || amount) || 20;
   const uses = parseInt(maxUses, 10) || 100;
+  const turnover = Math.max(0, parseFloat(minTurnover) || 0);
 
   if (!db.data.promocodes) db.data.promocodes = {};
   db.data.promocodes[cleanCode] = {
@@ -1513,6 +1650,7 @@ app.post('/api/promocodes/create', adminMiddleware(db), (req, res) => {
     percent: pct,
     usesLeft: uses,
     maxUses: uses,
+    minTurnover: turnover,
     active: true
   };
   db.save();
@@ -1532,6 +1670,37 @@ app.post('/api/promocodes/delete', adminMiddleware(db), (req, res) => {
     }
   }
   res.json({ success: true });
+});
+
+// Game and Admin Settings API
+app.get('/api/settings/public', (req, res) => {
+  res.json({
+    success: true,
+    globalRtp: db.data.settings?.globalRtp || 'auto',
+    upgraderRtp: db.data.settings?.upgraderRtp || 'auto',
+    crashRtp: db.data.settings?.crashRtp || 'auto',
+    boxesRtp: db.data.settings?.boxesRtp || 'auto'
+  });
+});
+
+app.get('/api/admin/settings', (req, res) => {
+  const adminId = req.query.adminId || req.query.userId || '';
+  if (!db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён' });
+  }
+  res.json({ success: true, settings: db.data.settings || {} });
+});
+
+app.post('/api/admin/settings', (req, res) => {
+  const { adminUserId, settings } = req.body;
+  if (!db.isAdmin(adminUserId)) {
+    return res.status(403).json({ error: 'Доступ запрещён' });
+  }
+  if (!db.data.settings) db.data.settings = {};
+  Object.assign(db.data.settings, settings || {});
+  db.save();
+  console.log(`[Admin Settings] ⚙️ Updated settings:`, settings);
+  res.json({ success: true, settings: db.data.settings });
 });
 
 // ==========================================
@@ -2051,6 +2220,270 @@ app.post('/api/payments/check-direct-invoice', async (req, res) => {
   }
 });
 
+// ==========================================
+// WITHDRAWAL APPROVAL & REJECTION HELPERS
+// ==========================================
+async function approveWithdrawal(withdrawalId, adminName = 'Администратор') {
+  const item = (db.data.withdrawals || []).find(w => w.id === withdrawalId);
+  if (!item) return { success: false, error: 'Заявка не найдена в базе!' };
+  if (item.status !== 'pending') return { success: false, error: `Заявка уже обработана (${item.status})` };
+
+  let checkUrl = null;
+  let chequeId = null;
+  let errorDetail = null;
+
+  if (item.method === 'cryptobot') {
+    try {
+      const pinId = parseInt(item.userId, 10);
+      const cbPayload = {
+        asset: 'USDT',
+        amount: item.amount.toFixed(2)
+      };
+      if (pinId && !isNaN(pinId)) {
+        cbPayload.pin_to_user_id = pinId;
+      }
+      let cbRes = await fetch('https://pay.crypt.bot/api/createCheck', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN
+        },
+        body: JSON.stringify(cbPayload)
+      });
+      let cbData = await cbRes.json();
+      
+      if (!cbData.ok && cbPayload.pin_to_user_id) {
+        delete cbPayload.pin_to_user_id;
+        cbRes = await fetch('https://pay.crypt.bot/api/createCheck', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN
+          },
+          body: JSON.stringify(cbPayload)
+        });
+        cbData = await cbRes.json();
+      }
+
+      if (cbData.ok && cbData.result?.bot_check_url) {
+        checkUrl = cbData.result.bot_check_url;
+        chequeId = cbData.result.check_id;
+        console.log(`[ApproveWithdraw] 💎 CryptoBot check created: ${checkUrl}`);
+      } else {
+        console.warn(`[ApproveWithdraw] CryptoBot check failure:`, cbData);
+        if (cbData?.error?.name === 'INSUFFICIENT_FUNDS' || cbData?.error?.description?.includes('funds')) {
+          errorDetail = 'На балансе приложения @CryptoBot недостаточно USDT для создания чека. Пополните баланс приложения в @CryptoBot!';
+        } else if (cbData?.error?.name === 'METHOD_DISABLED') {
+          errorDetail = 'Метод чеков отключен в настройках приложения @CryptoBot (My Apps -> Restrictions)!';
+        } else {
+          errorDetail = cbData?.error?.description || cbData?.error?.name || 'Ошибка создания чека в CryptoBot';
+        }
+      }
+    } catch (e) {
+      console.error('[ApproveWithdraw] CryptoBot network error:', e.message);
+      errorDetail = 'Сетевая ошибка CryptoBot: ' + e.message;
+    }
+
+    if (!checkUrl) {
+      return { success: false, error: errorDetail || 'Не удалось создать чек CryptoBot' };
+    }
+  } else if (item.method === 'xrocket') {
+    try {
+      let xRes = await fetch('https://pay.api.xrocket.exchange/api/v1/cheques', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + XROCKET_TOKEN
+        },
+        body: JSON.stringify({
+          clientChequeId: `xr_chk_${Date.now()}_${item.userId}`,
+          asset: 'USDT',
+          amount: item.amount.toFixed(2),
+          description: 'Вывод RoyalX',
+          targetType: 'telegram_user_id',
+          target: String(item.userId)
+        })
+      });
+      let xData = await xRes.json();
+
+      if (!xRes.ok) {
+        xRes = await fetch('https://pay.api.xrocket.exchange/api/v1/cheques', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + XROCKET_TOKEN
+          },
+          body: JSON.stringify({
+            clientChequeId: `xr_chk_${Date.now()}_${item.userId}`,
+            asset: 'USDT',
+            amount: item.amount.toFixed(2),
+            description: 'Вывод RoyalX'
+          })
+        });
+        xData = await xRes.json();
+      }
+
+      if (xRes.ok && xData) {
+        checkUrl = xData.links?.telegramBotLink || xData.links?.telegramMiniAppLink || (xData.chequeId ? `https://t.me/xrocket?start=mc_${xData.chequeId}` : null);
+        chequeId = xData.chequeId;
+        console.log(`[ApproveWithdraw] 🚀 xRocket cheque created: ${checkUrl}`);
+      } else {
+        console.warn(`[ApproveWithdraw] xRocket cheque failure:`, xData);
+        if (xData?.type === '/api/problems/operation_disabled') {
+          errorDetail = 'Чеки отключены в настройках приложения в @xRocket (Pay API -> Settings).';
+        } else if (xData?.type === '/api/problems/amount_more_than_app_balance') {
+          errorDetail = 'На балансе приложения @xRocket недостаточно USDT для чека. Пополните баланс в @xRocket!';
+        } else {
+          errorDetail = xData?.detail || xData?.title || 'Ошибка создания чека xRocket';
+        }
+      }
+    } catch (e) {
+      console.error('[ApproveWithdraw] xRocket network error:', e.message);
+      errorDetail = 'Сетевая ошибка xRocket: ' + e.message;
+    }
+
+    if (!checkUrl) {
+      return { success: false, error: errorDetail || 'Не удалось создать чек xRocket' };
+    }
+  }
+
+  item.status = 'completed';
+  item.processedAt = new Date().toISOString();
+  item.processedBy = adminName;
+  if (checkUrl) item.checkUrl = checkUrl;
+  if (chequeId) item.chequeId = chequeId;
+
+  // Update user's history
+  const user = db.getUser(item.userId);
+  if (user && Array.isArray(user.history)) {
+    const hist = user.history.find(h => h.title && h.title.includes(item.id));
+    if (hist) {
+      hist.status = 'ВЫПЛАЧЕНО';
+      if (checkUrl) hist.checkUrl = checkUrl;
+    }
+  }
+  db.save();
+  db.syncUserToSupabase(user);
+
+  // Send PM to user via Telegram Bot
+  if (telegramBot && item.userId) {
+    const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const userText = checkUrl
+      ? `🎉 <b>Ваш вывод средств одобрен!</b>\n\n💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b>\n⚡ <b>Платежная система:</b> <b>${item.methodName || item.method}</b>\n⏰ <b>Время:</b> Сегодня, ${dateStr}\n\n<blockquote>Ваш официальный чек сформирован и готов к активации! Нажмите кнопку ниже, чтобы забрать средства на баланс кошелька.</blockquote>\n\n<i>Приятной игры в Royal X! 👑</i>`
+      : `🎉 <b>Ваш вывод средств одобрен!</b>\n\n💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b>\n⚡ <b>Платежная система:</b> <b>${item.methodName || item.method}</b>\n📍 <b>Реквизиты:</b> <code>${item.address}</code>\n⏰ <b>Время:</b> Сегодня, ${dateStr}\n\n<blockquote>Средства успешно выплачены!</blockquote>\n\n<i>Приятной игры в Royal X! 👑</i>`;
+
+    const userReplyMarkup = checkUrl
+      ? {
+          inline_keyboard: [
+            [
+              { text: 'Забрать чек 💸', url: checkUrl }
+            ]
+          ]
+        }
+      : undefined;
+
+    telegramBot.sendMessage(item.userId, userText, {
+      parse_mode: 'HTML',
+      reply_markup: userReplyMarkup
+    }).catch(e => console.warn(`[ApproveWithdraw] User send error:`, e.message));
+  }
+
+  // Update all stored admin messages in Telegram (group & PMs)
+  if (telegramBot && Array.isArray(item.messageRefs)) {
+    const updateText = 
+`✅ <b>Заявка на вывод #${item.id} ОДОБРЕНА И ВЫПЛАЧЕНА</b>
+
+👤 <b>Игрок:</b> ${item.username || item.userId} (ID: <code>${item.userId}</code>)
+💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b>
+⚡ <b>Метод:</b> <b>${item.methodName || item.method}</b>
+${checkUrl ? `🔗 <b>Чек:</b> <a href="${checkUrl}">Открыть чек</a>\n` : ''}📍 <b>Реквизиты:</b> <code>${item.address || checkUrl || 'Чек в боте'}</code>
+👨‍💻 <b>Одобрил:</b> ${adminName}`;
+
+    for (const ref of item.messageRefs) {
+      try {
+        telegramBot.editMessageText(updateText, {
+          chat_id: ref.chatId,
+          message_id: ref.messageId,
+          parse_mode: 'HTML'
+        }).catch(() => {});
+      } catch (e) {}
+    }
+  }
+
+  return { success: true, item, checkUrl };
+}
+
+async function rejectWithdrawal(withdrawalId, adminName = 'Администратор') {
+  const item = (db.data.withdrawals || []).find(w => w.id === withdrawalId);
+  if (!item) return { success: false, error: 'Заявка не найдена в базе!' };
+  if (item.status !== 'pending') return { success: false, error: `Заявка уже обработана (${item.status})` };
+
+  item.status = 'rejected';
+  item.processedAt = new Date().toISOString();
+  item.processedBy = adminName;
+
+  // Refund user balance!
+  const user = db.getUser(item.userId);
+  user.balance = parseFloat(((user.balance || 0) + item.amount).toFixed(2));
+  user.totalWithdrawn = parseFloat(Math.max(0, (user.totalWithdrawn || 0) - item.amount).toFixed(2));
+
+  const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  
+  if (Array.isArray(user.history)) {
+    const hist = user.history.find(h => h.title && h.title.includes(item.id));
+    if (hist) {
+      hist.status = 'ОТКЛОНЕНО';
+    }
+  }
+
+  user.history.unshift({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    type: 'with_refund',
+    title: `Возврат отклонённого вывода #${item.id} ($${item.amount.toFixed(2)})`,
+    time: `Сегодня, ${dateStr}`,
+    amount: item.amount,
+    status: 'ВОЗВРАТ'
+  });
+
+  db.save();
+  db.syncUserToSupabase(user);
+
+  if (telegramBot && item.userId) {
+    const rejectText = 
+`❌ <b>Ваша заявка на вывод #${item.id} отклонена</b>
+
+💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b> возвращена на ваш игровой баланс.
+
+<blockquote>Если у вас есть вопросы, обратитесь в службу поддержки: @MartinCartier</blockquote>`;
+
+    telegramBot.sendMessage(item.userId, rejectText, {
+      parse_mode: 'HTML'
+    }).catch(e => console.warn(`[RejectWithdraw] User send error:`, e.message));
+  }
+
+  if (telegramBot && Array.isArray(item.messageRefs)) {
+    const updateText = 
+`❌ <b>Заявка на вывод #${item.id} ОТКЛОНЕНА</b>
+
+👤 <b>Игрок:</b> ${item.username || item.userId} (ID: <code>${item.userId}</code>)
+💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b> (возвращена игроку на баланс)
+⚡ <b>Метод:</b> <b>${item.methodName || item.method}</b>
+👨‍💻 <b>Отклонил:</b> ${adminName}`;
+
+    for (const ref of item.messageRefs) {
+      try {
+        telegramBot.editMessageText(updateText, {
+          chat_id: ref.chatId,
+          message_id: ref.messageId,
+          parse_mode: 'HTML'
+        }).catch(() => {});
+      } catch (e) {}
+    }
+  }
+
+  return { success: true, item };
+}
+
 app.post('/api/payments/withdraw', async (req, res) => {
   try {
     const { userId, method, amount, address } = req.body;
@@ -2071,308 +2504,112 @@ app.post('/api/payments/withdraw', async (req, res) => {
       });
     }
 
-    // Manual Admin Approval Withdrawal for USDT TRC-20 and Gram (TON)
-    if (method === 'usdt_trc20' || method === 'gram_ton') {
-      const withdrawalId = `W-${Math.floor(100000 + Math.random() * 900000)}`;
-      const methodName = method === 'usdt_trc20' ? 'USDT TRC-20' : 'Gram (TON)';
-      
-      user.balance = parseFloat(((user.balance || 0) - numAmount).toFixed(2));
-      user.totalWithdrawn = parseFloat(((user.totalWithdrawn || 0) + numAmount).toFixed(2));
+    const withdrawalId = `W-${Math.floor(100000 + Math.random() * 900000)}`;
+    const methodName = method === 'cryptobot' 
+      ? 'CryptoBot' 
+      : (method === 'xrocket' 
+          ? 'xRocket' 
+          : (method === 'usdt_trc20' ? 'USDT (TRC-20)' : 'Gram (TON)'));
 
-      const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-      user.history.unshift({
-        id: Date.now() + Math.floor(Math.random() * 1000),
-        type: 'with',
-        title: `Вывод ${methodName} (#${withdrawalId})`,
-        time: `Сегодня, ${dateStr}`,
-        amount: -numAmount,
-        status: 'НА ПРОВЕРКЕ',
-        address
-      });
+    const displayAddress = (method === 'cryptobot' || method === 'xrocket')
+      ? `${methodName} Чек`
+      : String(address || '').trim();
 
-      const withdrawalRecord = {
-        id: withdrawalId,
-        userId: String(userId),
-        username: user.name || '',
-        amount: numAmount,
-        method,
-        methodName,
-        address: String(address || '').trim(),
-        status: 'pending',
-        createdAt: new Date().toISOString()
-      };
+    user.balance = parseFloat(((user.balance || 0) - numAmount).toFixed(2));
+    user.totalWithdrawn = parseFloat(((user.totalWithdrawn || 0) + numAmount).toFixed(2));
 
-      if (!Array.isArray(db.data.withdrawals)) db.data.withdrawals = [];
-      db.data.withdrawals.unshift(withdrawalRecord);
-      db.save();
+    const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    user.history.unshift({
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      type: 'with',
+      title: `Вывод ${methodName} (#${withdrawalId})`,
+      time: `Сегодня, ${dateStr}`,
+      amount: -numAmount,
+      status: 'НА ПРОВЕРКЕ',
+      address: displayAddress
+    });
 
-      console.log(`[ManualWithdraw] 📥 Withdrawal #${withdrawalId} requested: $${numAmount} via ${methodName} to ${address}`);
+    const withdrawalRecord = {
+      id: withdrawalId,
+      userId: String(userId),
+      username: user.name || '',
+      amount: numAmount,
+      method,
+      methodName,
+      address: displayAddress,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      messageRefs: []
+    };
 
-      // Send Telegram notification to admins in PM
-      if (telegramBot) {
-        const admins = db.data.admins || DEFAULT_ADMINS;
-        const adminText = 
+    if (!Array.isArray(db.data.withdrawals)) db.data.withdrawals = [];
+    db.data.withdrawals.unshift(withdrawalRecord);
+    db.save();
+    db.syncUserToSupabase(user);
+
+    console.log(`[WithdrawRequest] 📥 Withdrawal #${withdrawalId} requested: $${numAmount} via ${methodName} by user ${userId}`);
+
+    // Send notification to group and admin PMs
+    if (telegramBot) {
+      const adminText = 
 `📥 <b>Новая заявка на вывод средств #${withdrawalId}</b>
 
 👤 <b>Игрок:</b> ${user.name || 'Пользователь'} (ID: <code>${userId}</code>)
 💰 <b>Сумма:</b> <b>$${numAmount.toFixed(2)} USDT</b>
-💳 <b>Метод:</b> <b>${methodName}</b>
-📍 <b>Адрес кошелька:</b>
-<code>${address}</code>
-⏰ <b>Время:</b> ${dateStr}`;
+⚡ <b>Метод:</b> <b>${methodName}</b>
+${(address && address.trim()) ? `📍 <b>Адрес кошелька:</b> <code>${address.trim()}</code>\n` : ''}⏰ <b>Время:</b> ${dateStr}
 
-        const inlineKeyboard = {
-          inline_keyboard: [
-            [
-              { text: '✅ Подтвердить вывод', callback_data: `w_appr_${withdrawalId}` },
-              { text: '❌ Отказать в выплате', callback_data: `w_rejc_${withdrawalId}` }
-            ]
+<i>Нажмите кнопку ниже: при одобрении игроку высылается чек в бота, при отказе — средства возвращаются на баланс.</i>`;
+
+      const inlineKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '✅ Одобрить вывод', callback_data: `w_appr_${withdrawalId}` },
+            { text: '❌ Отказать', callback_data: `w_rejc_${withdrawalId}` }
           ]
-        };
+        ]
+      };
 
-        for (const admId of admins) {
-          try {
-            telegramBot.sendMessage(admId, adminText, {
-              parse_mode: 'HTML',
-              reply_markup: inlineKeyboard
-            }).catch(e => console.warn(`[WithdrawNotify] Send to admin ${admId} error:`, e.message));
-          } catch (e) {}
-        }
+      const recipientChatIds = new Set(db.data.admins || DEFAULT_ADMINS);
+      if (db.data.settings?.adminGroupId) {
+        recipientChatIds.add(String(db.data.settings.adminGroupId));
       }
 
-      return res.json({
-        success: true,
-        manualWithdraw: true,
-        withdrawalId,
-        amount: numAmount,
-        method,
-        message: `Заявка на вывод $${numAmount.toFixed(2)} (${methodName}) отправлена администратору!`,
-        user
-      });
-    }
-
-    console.log(`[AutoWithdraw] 💸 User ${userId} requested auto-withdrawal of $${numAmount} via ${method}`);
-
-    let checkUrl = null;
-    let chequeId = null;
-    let isDirectTransfer = false;
-    let apiErrorDetail = null;
-
-    if (method === 'xrocket') {
-      // 1. Try personal Cheque creation (POST /api/v1/cheques)
-      try {
-        const xRes = await fetch('https://pay.api.xrocket.exchange/api/v1/cheques', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + XROCKET_TOKEN
-          },
-          body: JSON.stringify({
-            clientChequeId: `xr_chk_${Date.now()}_${userId}`,
-            asset: 'USDT',
-            amount: numAmount.toFixed(2),
-            description: 'Вывод RoyalX',
-            targetType: 'telegram_user_id',
-            target: String(userId)
-          })
-        });
-        const xData = await xRes.json();
-        if (xRes.ok && xData) {
-          checkUrl = xData.links?.telegramBotLink || xData.links?.telegramMiniAppLink || (xData.chequeId ? `${XROCKET_PAY_URL}?start=mc_${xData.chequeId}` : null);
-          chequeId = xData.chequeId;
-          console.log(`[AutoWithdraw] 🚀 Real xRocket cheque created: ${checkUrl}`);
-        } else {
-          console.warn(`[AutoWithdraw] xRocket cheque note:`, xData);
-          if (xData?.type === '/api/problems/operation_disabled') {
-            apiErrorDetail = 'Переводы/чеки отключены в @xRocket. Включите функцию переводов в настройках приложения в боте @xRocket (Pay API -> Plastic Jade -> Settings).';
-          } else if (xData?.type === '/api/problems/amount_more_than_app_balance') {
-            apiErrorDetail = 'На балансе приложения в @xRocket недостаточно USDT для вывода. Пополните баланс приложения в @xRocket.';
-          } else {
-            apiErrorDetail = xData?.detail || xData?.title || 'Ошибка xRocket API';
-          }
-        }
-      } catch (e) {
-        console.error('[AutoWithdraw] xRocket cheque error:', e.message);
-        apiErrorDetail = 'Сетевая ошибка обращения к xRocket API';
-      }
-
-      // 2. If cheque not created, try direct Payout (POST /api/v1/payouts)
-      if (!checkUrl && (!apiErrorDetail || apiErrorDetail.includes('отключены'))) {
+      for (const chatId of recipientChatIds) {
         try {
-          const pRes = await fetch('https://pay.api.xrocket.exchange/api/v1/payouts', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + XROCKET_TOKEN
-            },
-            body: JSON.stringify({
-              clientPayoutId: `pout_${Date.now()}_${userId}`,
-              target: String(userId),
-              targetType: 'telegram_user_id',
-              asset: 'USDT',
-              amount: numAmount.toFixed(2),
-              description: 'Вывод RoyalX'
-            })
+          const sentMsg = await telegramBot.sendMessage(chatId, adminText, {
+            parse_mode: 'HTML',
+            reply_markup: inlineKeyboard
           });
-          const pData = await pRes.json();
-          if (pRes.ok && pData && (pData.status === 'finished' || pData.status === 'pending' || pData.payoutId)) {
-            chequeId = pData.payoutId;
-            isDirectTransfer = true;
-            apiErrorDetail = null;
-            console.log(`[AutoWithdraw] 🚀 Real xRocket payout completed: ${pData.payoutId}`);
+          if (sentMsg && sentMsg.message_id) {
+            withdrawalRecord.messageRefs.push({
+              chatId: String(sentMsg.chat.id),
+              messageId: sentMsg.message_id
+            });
           }
         } catch (e) {
-          console.error('[AutoWithdraw] xRocket payout error:', e.message);
+          console.warn(`[WithdrawNotify] Send to ${chatId} error:`, e.message);
         }
       }
-
-      // If xRocket failed completely, do NOT fabricate fake links
-      if (!checkUrl && !isDirectTransfer) {
-        return res.status(400).json({
-          error: `❌ Ошибка авто-вывода через xRocket: ${apiErrorDetail || 'проверьте настройки приложения в @xRocket'}`
-        });
-      }
-
-    } else {
-      // CryptoBot
-      // 1. Try createCheck (POST /api/createCheck)
-      try {
-        const cbRes = await fetch('https://pay.crypt.bot/api/createCheck', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN
-          },
-          body: JSON.stringify({
-            asset: 'USDT',
-            amount: numAmount.toFixed(2),
-            pin_to_user_id: parseInt(userId, 10) || undefined
-          })
-        });
-        const cbData = await cbRes.json();
-        if (cbData.ok && cbData.result) {
-          checkUrl = cbData.result.bot_check_url;
-          chequeId = cbData.result.check_id;
-          console.log(`[AutoWithdraw] 💎 Real CryptoBot check created: ${checkUrl}`);
-        } else {
-          console.warn(`[AutoWithdraw] CryptoBot note:`, cbData?.error);
-          if (cbData?.error?.name === 'METHOD_DISABLED') {
-            apiErrorDetail = 'Метод выплат отключен в @CryptoBot. Включите createCheck/transfer в настройках вашего приложения в @CryptoBot (Crypto Pay -> My Apps -> Restrictions)!';
-          } else if (cbData?.error?.name === 'INSUFFICIENT_FUNDS' || cbData?.error?.description?.includes('funds')) {
-            apiErrorDetail = 'На балансе приложения @CryptoBot недостаточно USDT для выплаты. Пополните баланс приложения в @CryptoBot.';
-          } else {
-            apiErrorDetail = cbData?.error?.description || cbData?.error?.name || 'Ошибка Crypto Pay API';
-          }
-        }
-      } catch (e) {
-        console.error('[AutoWithdraw] CryptoBot error:', e.message);
-        apiErrorDetail = 'Сетевая ошибка обращения к Crypto Pay API';
-      }
-
-      // 2. If check failed, try direct transfer (POST /api/transfer)
-      if (!checkUrl) {
-        try {
-          const trRes = await fetch('https://pay.crypt.bot/api/transfer', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Crypto-Pay-API-Token': CRYPTOBOT_TOKEN
-            },
-            body: JSON.stringify({
-              user_id: parseInt(userId, 10),
-              asset: 'USDT',
-              amount: numAmount.toFixed(2),
-              spend_id: `cb_tr_${Date.now()}_${userId}`,
-              comment: 'Вывод RoyalX'
-            })
-          });
-          const trData = await trRes.json();
-          if (trData.ok && trData.result) {
-            chequeId = trData.result.transfer_id;
-            isDirectTransfer = true;
-            apiErrorDetail = null;
-            console.log(`[AutoWithdraw] 💎 Real CryptoBot transfer completed: ${trData.result.transfer_id}`);
-          }
-        } catch (e) {
-          console.error('[AutoWithdraw] CryptoBot transfer error:', e.message);
-        }
-      }
-
-      // If CryptoBot failed completely, do NOT fabricate fake links
-      if (!checkUrl && !isDirectTransfer) {
-        return res.status(400).json({
-          error: `❌ Ошибка авто-вывода через CryptoBot: ${apiErrorDetail || 'проверьте настройки приложения в @CryptoBot'}`
-        });
-      }
+      db.save();
     }
 
-    const updatedUser = db.recordWithdrawal(userId, { 
-      amount: numAmount, 
-      method, 
-      address: checkUrl || (isDirectTransfer ? 'Direct Transfer' : 'Auto Withdrawal'), 
-      checkUrl, 
-      chequeId 
-    });
+    const messageText = (method === 'cryptobot' || method === 'xrocket')
+      ? `Заявка #${withdrawalId} на вывод $${numAmount.toFixed(2)} (${methodName}) отправлена! Чек придёт в бота после одобрения.`
+      : `Заявка #${withdrawalId} на вывод $${numAmount.toFixed(2)} (${methodName}) отправлена администратору!`;
 
-    // Send beautiful PM to user via Telegram bot
-    const methodName = method === 'xrocket' ? 'xRocket' : 'CryptoBot';
-    if (telegramBot && userId) {
-      const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-      const pmMessage = isDirectTransfer
-        ? `💸 <b>Выплата успешно выполнена!</b>\n\n💰 <b>Сумма:</b> $${numAmount.toFixed(2)} USDT\n⚡ <b>Платежная система:</b> ${methodName} (Прямой перевод)\n⏰ <b>Время:</b> Сегодня, ${dateStr}\n\n<blockquote>Средства успешно отправлены напрямую на ваш баланс в ${methodName}!</blockquote>\n\n<i>Приятной игры в Royal X! 👑</i>`
-        : `💸 <b>Выплата успешно отправлена!</b>\n\n💰 <b>Сумма:</b> $${numAmount.toFixed(2)} USDT\n⚡ <b>Платежная система:</b> ${methodName} (Чек)\n⏰ <b>Время:</b> Сегодня, ${dateStr}\n\n<blockquote>Ваш официальный чек на выплату сформирован и готов к активации! Нажмите кнопку ниже, чтобы забрать средства на баланс кошелька.</blockquote>\n\n<i>Приятной игры в Royal X! 👑</i>`;
-
-      const replyMarkup = checkUrl
-        ? {
-            inline_keyboard: [
-              [
-                {
-                  text: 'Забрать чек 💸',
-                  url: checkUrl
-                }
-              ]
-            ]
-          }
-        : {
-            inline_keyboard: [
-              [
-                {
-                  text: `Открыть ${methodName} 🚀`,
-                  url: method === 'xrocket' ? XROCKET_PAY_URL : CRYPTOBOT_PAY_URL
-                }
-              ]
-            ]
-          };
-
-      try {
-        telegramBot.sendMessage(userId, pmMessage, {
-          parse_mode: 'HTML',
-          reply_markup: replyMarkup
-        }).catch(err => {
-          console.warn(`[AutoWithdraw] PM notice error:`, err.message);
-        });
-        console.log(`[AutoWithdraw] 📲 Sent Telegram PM to user ${userId}:`, checkUrl || 'direct transfer');
-      } catch (e) {
-        console.warn(`[AutoWithdraw] Telegram send error:`, e.message);
-      }
-    }
-
-    res.json({
+    return res.json({
       success: true,
-      autoWithdraw: true,
-      checkUrl,
-      chequeId,
-      isDirectTransfer,
+      manualWithdraw: true,
+      withdrawalId,
       amount: numAmount,
       method,
-      message: isDirectTransfer 
-        ? `Выплата $${numAmount.toFixed(2)} переведена на ваш кошелек в ${methodName}!`
-        : `Выплата $${numAmount.toFixed(2)} сформирована! Официальный чек отправлен вам в ЛС Telegram.`,
-      user: updatedUser
+      message: messageText,
+      user
     });
   } catch (err) {
     console.error('[Withdraw] Error:', err.message);
-    res.status(500).json({ error: 'Ошибка вывода средств' });
+    res.status(500).json({ error: 'Ошибка обработки вывода средств' });
   }
 });
 
@@ -2772,18 +3009,26 @@ app.get('/api/admin/db/withdrawals', (req, res) => {
   res.json({ success: true, withdrawals: db.data.withdrawals || [] });
 });
 
-app.post('/api/admin/db/withdrawals/status', (req, res) => {
+app.post('/api/admin/db/withdrawals/status', async (req, res) => {
   const { adminUserId, withdrawalId, status } = req.body;
   if (!db.isAdmin(adminUserId)) {
     return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
   }
   const item = (db.data.withdrawals || []).find(w => w.id === withdrawalId);
-  if (item) {
-    item.status = status || 'ВЫПЛАЧЕНО';
-    db.save();
-    return res.json({ success: true, withdrawal: item });
+  if (!item) {
+    return res.status(404).json({ error: 'Заявка не найдена' });
   }
-  res.status(404).json({ error: 'Заявка не найдена' });
+
+  const isReject = status === 'rejected' || status === 'ОТКЛОНЕНО';
+  if (isReject) {
+    const r = await rejectWithdrawal(withdrawalId, `Админ ${adminUserId}`);
+    if (!r.success) return res.status(400).json({ error: r.error });
+    return res.json({ success: true, withdrawal: r.item });
+  } else {
+    const r = await approveWithdrawal(withdrawalId, `Админ ${adminUserId}`);
+    if (!r.success) return res.status(400).json({ error: r.error });
+    return res.json({ success: true, withdrawal: r.item });
+  }
 });
 
 // Start Express Server
@@ -3134,12 +3379,14 @@ function initTelegramBot(token) {
         }
 
         const adminId = String(query.from.id);
+        const chatId = String(query.message?.chat?.id || '');
 
         if (!data.startsWith('w_appr_') && !data.startsWith('w_rejc_')) {
           return;
         }
 
-        if (!db.isAdmin(adminId)) {
+        const isGroupTarget = db.data.settings?.adminGroupId && chatId === String(db.data.settings.adminGroupId);
+        if (!db.isAdmin(adminId) && !isGroupTarget) {
           return telegramBot.answerCallbackQuery(query.id, {
             text: '❌ У вас нет прав администратора!',
             show_alert: true
@@ -3148,120 +3395,30 @@ function initTelegramBot(token) {
 
         const isApprove = data.startsWith('w_appr_');
         const withdrawalId = data.replace('w_appr_', '').replace('w_rejc_', '');
-
-        const item = (db.data.withdrawals || []).find(w => w.id === withdrawalId);
-        if (!item) {
-          return telegramBot.answerCallbackQuery(query.id, {
-            text: '❌ Заявка не найдена в базе!',
-            show_alert: true
-          });
-        }
-
-        if (item.status !== 'pending') {
-          return telegramBot.answerCallbackQuery(query.id, {
-            text: `⚠️ Заявка уже обработана (${item.status})`,
-            show_alert: true
-          });
-        }
-
         const adminName = query.from.username ? `@${query.from.username}` : (query.from.first_name || adminId);
 
         if (isApprove) {
-          item.status = 'completed';
-          item.processedAt = new Date().toISOString();
-          item.processedBy = adminName;
-          db.save();
-
-          // Edit admin message
-          try {
-            await telegramBot.editMessageText(
-`✅ <b>Заявка на вывод #${item.id} ВЫПЛАЧЕНА</b>
-
-👤 <b>Игрок:</b> ${item.username || item.userId} (ID: <code>${item.userId}</code>)
-💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b>
-💳 <b>Метод:</b> <b>${item.methodName || item.method}</b>
-📍 <b>Адрес:</b> <code>${item.address}</code>
-👨‍💻 <b>Одобрил:</b> ${adminName}`,
-              {
-                chat_id: query.message.chat.id,
-                message_id: query.message.message_id,
-                parse_mode: 'HTML'
-              }
-            );
-          } catch (e) {}
-
-          // Notify user
-          try {
-            await telegramBot.sendMessage(
-              item.userId,
-`🎉 <b>Ваш вывод средств одобрен и выплачен!</b>
-
-💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b>
-💳 <b>Метод:</b> <b>${item.methodName || item.method}</b>
-📍 <b>Адрес:</b> <code>${item.address}</code>
-
-Средства успешно отправлены на ваш кошелёк. Спасибо за игру в Royal X!`,
-              { parse_mode: 'HTML' }
-            );
-          } catch (e) {}
-
+          const res = await approveWithdrawal(withdrawalId, adminName);
+          if (!res.success) {
+            return telegramBot.answerCallbackQuery(query.id, {
+              text: `❌ ${res.error}`,
+              show_alert: true
+            });
+          }
           return telegramBot.answerCallbackQuery(query.id, {
-            text: '✅ Вывод успешно подтверждён!',
+            text: res.checkUrl ? '✅ Чек успешно создан и отправлен игроку в бота!' : '✅ Вывод успешно одобрен!',
             show_alert: false
           });
         } else {
-          // Reject and refund balance to user!
-          item.status = 'rejected';
-          item.processedAt = new Date().toISOString();
-          item.processedBy = adminName;
-
-          const user = db.getUser(item.userId);
-          user.balance = parseFloat(((user.balance || 0) + item.amount).toFixed(2));
-          user.totalWithdrawn = parseFloat(Math.max(0, (user.totalWithdrawn || 0) - item.amount).toFixed(2));
-
-          const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-          user.history.unshift({
-            id: Date.now() + Math.floor(Math.random() * 1000),
-            type: 'with_refund',
-            title: `Возврат отклонённого вывода #${item.id} ($${item.amount.toFixed(2)})`,
-            time: `Сегодня, ${dateStr}`,
-            amount: item.amount,
-            status: 'ВОЗВРАТ'
-          });
-          db.save();
-
-          // Edit admin message
-          try {
-            await telegramBot.editMessageText(
-`❌ <b>Заявка на вывод #${item.id} ОТКЛОНЕНА</b>
-
-👤 <b>Игрок:</b> ${item.username || item.userId} (ID: <code>${item.userId}</code>)
-💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b> (возвращена на баланс игрока)
-💳 <b>Метод:</b> <b>${item.methodName || item.method}</b>
-📍 <b>Адрес:</b> <code>${item.address}</code>
-👨‍💻 <b>Отклонил:</b> ${adminName}`,
-              {
-                chat_id: query.message.chat.id,
-                message_id: query.message.message_id,
-                parse_mode: 'HTML'
-              }
-            );
-          } catch (e) {}
-
-          // Notify user
-          try {
-            await telegramBot.sendMessage(
-              item.userId,
-`❌ <b>Ваша заявка на вывод отклонена администратором</b>
-
-💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b> возвращена на ваш баланс.
-Если у вас есть вопросы, обратитесь в службу поддержки: @${SUPPORT_USERNAME}`,
-              { parse_mode: 'HTML' }
-            );
-          } catch (e) {}
-
+          const res = await rejectWithdrawal(withdrawalId, adminName);
+          if (!res.success) {
+            return telegramBot.answerCallbackQuery(query.id, {
+              text: `❌ ${res.error}`,
+              show_alert: true
+            });
+          }
           return telegramBot.answerCallbackQuery(query.id, {
-            text: '❌ Вывод отклонён, средства возвращены игроку на баланс!',
+            text: `❌ Заявка отклонена, $${res.item.amount.toFixed(2)} USDT возвращены игроку на баланс!`,
             show_alert: true
           });
         }

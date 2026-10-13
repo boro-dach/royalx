@@ -19,7 +19,8 @@ export default function UpgradeGame({ onBack }) {
     processBetForPass,
     adminSettings,
     userRtp,
-    historyItems
+    historyItems,
+    userStats
   } = useApp();
 
   const [betAmount, setBetAmount] = useState(1);
@@ -99,9 +100,9 @@ export default function UpgradeGame({ onBack }) {
 
   const winBoxTimerRef = useRef(null);
 
-  // Calculate Win Chance (0.1 to 95%) - exactly equal to chancePercent!
+  // Calculate Win Chance (0.1 to 75%) - exactly equal to chancePercent!
   // For 20%, winChance is exactly 20.00%, winAngle is exactly 72 degrees (20% of 360 circle)
-  const winChance = Math.min(95, Math.max(0.1, parseFloat((Number(chancePercent) || 20).toFixed(2))));
+  const winChance = Math.min(75, Math.max(0.1, parseFloat((Number(chancePercent) || 20).toFixed(2))));
   const winAngle = (winChance / 100) * 360;
   const targetWin = parseFloat((betAmount * multiplier).toFixed(2));
 
@@ -139,7 +140,7 @@ export default function UpgradeGame({ onBack }) {
 
   const handleSelectChance = (c) => {
     if (isSpinning) return;
-    const num = Math.max(0.5, Math.min(95, parseFloat(c)));
+    const num = Math.max(0.5, Math.min(75, parseFloat(c)));
     setChancePercent(num);
     const mult = parseFloat((100 / num).toFixed(2));
     setMultiplier(mult);
@@ -148,7 +149,7 @@ export default function UpgradeGame({ onBack }) {
 
   const handleAdjustChance = (delta) => {
     if (isSpinning) return;
-    const next = Math.max(1, Math.min(95, parseFloat(((Number(chancePercent) || 0) + delta).toFixed(1))));
+    const next = Math.max(1, Math.min(75, parseFloat(((Number(chancePercent) || 0) + delta).toFixed(1))));
     setChancePercent(next);
     const mult = parseFloat((100 / next).toFixed(2));
     setMultiplier(mult);
@@ -157,18 +158,18 @@ export default function UpgradeGame({ onBack }) {
 
   const handleSelectMultiplier = (m) => {
     if (isSpinning) return;
-    const num = Math.max(1.05, Math.min(500, parseFloat(m)));
+    const num = Math.max(1.33, Math.min(500, parseFloat(m)));
     setMultiplier(num);
-    const ch = Math.max(0.2, Math.min(95, parseFloat((100 / num).toFixed(2))));
+    const ch = Math.max(0.2, Math.min(75, parseFloat((100 / num).toFixed(2))));
     setChancePercent(ch);
     try { bjAudio.playChip(); } catch (e) {}
   };
 
   const handleAdjustMultiplier = (delta) => {
     if (isSpinning) return;
-    const next = Math.max(1.05, Math.min(500, parseFloat((multiplier + delta).toFixed(1))));
+    const next = Math.max(1.33, Math.min(500, parseFloat((multiplier + delta).toFixed(1))));
     setMultiplier(next);
-    const ch = Math.max(0.2, Math.min(95, parseFloat((100 / next).toFixed(2))));
+    const ch = Math.max(0.2, Math.min(75, parseFloat((100 / next).toFixed(2))));
     setChancePercent(ch);
     try { bjAudio.playChip(); } catch (e) {}
   };
@@ -204,37 +205,84 @@ export default function UpgradeGame({ onBack }) {
     processBetForPass(betAmount);
     try { bjAudio.playChip(); } catch (e) {}
 
-    // 2. Determine outcome based on probabilities and admin overrides
-    const forceWin = adminSettings?.upgraderRtp === 'win' || adminSettings?.globalRtp === 'win' || userRtp === 'win';
-    const forceLose = adminSettings?.upgraderRtp === 'lose' || adminSettings?.globalRtp === 'lose' || userRtp === 'lose';
+    // 2. Smart Anti-Abuse System:
+    // If player has too much profit or consecutive wins in a row, drain them!
+    let consecutiveWins = 0;
+    for (const h of history) {
+      if (h.isWin) consecutiveWins++;
+      else break;
+    }
+
+    const dep = parseFloat(userStats?.totalDeposits) || 0;
+    let promo = 0;
+    if (Array.isArray(historyItems)) {
+      promo = historyItems.filter(h => h.type === 'promo').reduce((s, h) => s + (parseFloat(h.amount) || 0), 0);
+    }
+    const baseInvestment = Math.max(5.0, dep + promo);
+    const isBigBalancePlus = balance >= baseInvestment * 2.5;
+
+    // Detect if user has consecutive wins or too big plus
+    let smartForceLose = false;
+    if (consecutiveWins >= 3) {
+      // 3 or more wins in a row -> 100% drain
+      smartForceLose = true;
+    } else if (consecutiveWins >= 2 && (winChance >= 45 || isBigBalancePlus)) {
+      // 2 wins in a row with high chance or high balance -> 90% chance to drain
+      if (Math.random() < 0.90) smartForceLose = true;
+    } else if (isBigBalancePlus && winChance >= 50) {
+      // Big plus relative to deposit/promos with high chance -> 80% drain
+      if (Math.random() < 0.80) smartForceLose = true;
+    }
+
+    // Determine outcome based on probabilities and admin overrides
+    const forceLose = adminSettings?.upgraderRtp === 'lose' || adminSettings?.globalRtp === 'lose' || userRtp === 'lose' || smartForceLose;
+    const forceWin = !forceLose && (adminSettings?.upgraderRtp === 'win' || adminSettings?.globalRtp === 'win' || userRtp === 'win');
     const isCasinoMode = adminSettings?.upgraderRtp === 'casino' || adminSettings?.globalRtp === 'casino' || userRtp === 'casino';
     const targetRtp = adminSettings?.targetRtpPercent !== undefined ? parseFloat(adminSettings.targetRtpPercent) : 80;
 
     let isWin = false;
     let landingAngle = 0;
 
-    if (forceWin) {
-      isWin = true;
-      landingAngle = Math.random() * Math.max(1, winAngle - 4) + 2;
-    } else if (forceLose) {
-      isWin = false;
+    // Helper: bottom-centered sector needle landing (centered at 180° / 6 o'clock)
+    const getWinLanding = () => {
+      const half = winAngle / 2;
+      const offset = (Math.random() * Math.max(1, winAngle - 6)) - half + 3;
+      return (180 + offset + 360) % 360;
+    };
+    const getLoseLanding = () => {
+      const half = winAngle / 2;
       const loseRange = 360 - winAngle;
-      landingAngle = winAngle + (Math.random() * Math.max(1, loseRange - 4) + 2);
+      const offset = (half + 4) + Math.random() * Math.max(2, loseRange - 8);
+      return (180 + offset) % 360;
+    };
+
+    if (forceLose) {
+      isWin = false;
+      landingAngle = getLoseLanding();
+    } else if (forceWin) {
+      isWin = true;
+      landingAngle = getWinLanding();
     } else if (isCasinoMode) {
-      // Smart House Edge: scale win chance by target RTP (e.g. 80%)
       const scaledWinChance = Math.max(1, winChance * (targetRtp / 100));
       const willWin = (Math.random() * 100) < scaledWinChance;
       if (willWin) {
         isWin = true;
-        landingAngle = Math.random() * Math.max(1, winAngle - 4) + 2;
+        landingAngle = getWinLanding();
       } else {
         isWin = false;
-        const loseRange = 360 - winAngle;
-        landingAngle = winAngle + (Math.random() * Math.max(1, loseRange - 4) + 2);
+        landingAngle = getLoseLanding();
       }
     } else {
-      landingAngle = Math.random() * 360;
-      isWin = landingAngle <= winAngle;
+      // Anti-farming curve for high chance (prevents 75% spam abuse)
+      const effectiveChance = winChance >= 50 ? winChance * 0.88 : winChance;
+      const willWin = (Math.random() * 100) < effectiveChance;
+      if (willWin) {
+        isWin = true;
+        landingAngle = getWinLanding();
+      } else {
+        isWin = false;
+        landingAngle = getLoseLanding();
+      }
     }
 
     // 3. Compute continuous rotation angle (5 full spins + landing angle)
@@ -277,14 +325,13 @@ export default function UpgradeGame({ onBack }) {
 
         try {
           confetti({
-            particleCount: 50,
+            particleCount: 55,
             spread: 70,
             origin: { y: 0.55 },
+            zIndex: 999999,
             colors: ['#00e699', '#38ef7d', '#00ffc8', '#ffffff', '#ffd200']
           });
         } catch (e) {}
-
-        showToast(`🎉 ВЫИГРЫШ +$${targetWin.toFixed(2)} (x${multiplier})!`);
       } else {
         recordGameBet({
           game: 'Апгрейдер',
@@ -295,7 +342,6 @@ export default function UpgradeGame({ onBack }) {
         });
 
         try { bjAudio.playLose(); } catch (e) {}
-        showToast('💥 Проигрыш. Стрелка вне сектора', false);
       }
     }, 3500);
   };
@@ -334,9 +380,15 @@ export default function UpgradeGame({ onBack }) {
           </div>
         </div>
 
-        {/* Central Roulette Wheel Display */}
+        {/* Central Roulette Wheel Display (Bottom-Up Tachometer Gauge) */}
         <div className="upgrader-wheel-box" style={{ flex: 1, margin: 'auto 0' }}>
           <div className="upgrader-wheel-container">
+            {/* Tachometer Gauge Percentage Labels: 100% top, 50% left & right, 0% bottom */}
+            <span className="upgrader-gauge-tag tag-top">100%</span>
+            <span className="upgrader-gauge-tag tag-left">50%</span>
+            <span className="upgrader-gauge-tag tag-right">50%</span>
+            <span className="upgrader-gauge-tag tag-bottom">0%</span>
+
             <svg
               className="upgrader-wheel-svg"
               viewBox="0 0 280 280"
@@ -344,26 +396,51 @@ export default function UpgradeGame({ onBack }) {
               height="276"
             >
               <defs>
-                <linearGradient id="upgradeWinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#00e699" />
-                  <stop offset="100%" stopColor="#00c282" />
+                <linearGradient id="upgradeWinGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#ff7700" />
+                  <stop offset="50%" stopColor="#ffaa00" />
+                  <stop offset="100%" stopColor="#ffd000" />
                 </linearGradient>
 
                 <filter id="winGlow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feGaussianBlur stdDeviation="4.5" result="blur" />
                   <feComposite in="SourceGraphic" in2="blur" operator="over" />
                 </filter>
               </defs>
 
-              {/* Outer Subtle Ring */}
+              {/* Outer Subtle Gauge Ring */}
               <circle
                 cx="140"
                 cy="140"
                 r="130"
                 fill="none"
-                stroke="rgba(255, 255, 255, 0.05)"
-                strokeWidth="1.5"
+                stroke="rgba(255, 255, 255, 0.06)"
+                strokeWidth="1.2"
               />
+
+              {/* Tachometer Tick Marks around the wheel */}
+              {[...Array(60)].map((_, i) => {
+                const deg = i * 6;
+                const isMajor = deg % 30 === 0;
+                const rad = (deg * Math.PI) / 180;
+                const r1 = isMajor ? 119 : 123;
+                const r2 = 128;
+                const x1 = 140 + r1 * Math.cos(rad);
+                const y1 = 140 + r1 * Math.sin(rad);
+                const x2 = 140 + r2 * Math.cos(rad);
+                const y2 = 140 + r2 * Math.sin(rad);
+                return (
+                  <line
+                    key={deg}
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke={isMajor ? "rgba(255, 255, 255, 0.35)" : "rgba(255, 255, 255, 0.09)"}
+                    strokeWidth={isMajor ? "1.8" : "1.0"}
+                  />
+                );
+              })}
 
               {/* Background Losing Track */}
               <circle
@@ -375,7 +452,7 @@ export default function UpgradeGame({ onBack }) {
                 strokeWidth={strokeWidth}
               />
 
-              {/* Winning Sector Arc (starts at 12 o'clock = -90deg) */}
+              {/* Winning Sector Arc (centered at 6 o'clock = 90deg, fills bottom-up) */}
               <circle
                 cx="140"
                 cy="140"
@@ -385,30 +462,10 @@ export default function UpgradeGame({ onBack }) {
                 strokeWidth={strokeWidth}
                 strokeDasharray={`${greenStrokeLength} ${circumference}`}
                 strokeDashoffset="0"
-                transform="rotate(-90 140 140)"
-                filter={winChance > 5 ? 'url(#winGlow)' : undefined}
+                transform={`rotate(${90 - winAngle / 2} 140 140)`}
+                filter={winChance > 1 ? 'url(#winGlow)' : undefined}
                 className="upgrader-green-arc"
               />
-
-              {/* Tick Marks around the wheel */}
-              {[0, 45, 90, 135, 180, 225, 270, 315].map(deg => {
-                const rad = (deg * Math.PI) / 180;
-                const x1 = 140 + 92 * Math.cos(rad);
-                const y1 = 140 + 92 * Math.sin(rad);
-                const x2 = 140 + 98 * Math.cos(rad);
-                const y2 = 140 + 98 * Math.sin(rad);
-                return (
-                  <line
-                    key={deg}
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
-                    stroke="rgba(255, 255, 255, 0.12)"
-                    strokeWidth="1.5"
-                  />
-                );
-              })}
             </svg>
 
             {/* Rotating Needle / Arrow in center */}
@@ -430,45 +487,35 @@ export default function UpgradeGame({ onBack }) {
             {/* Center Hub & Display Info */}
             <div className="upgrader-center-hub">
               <div className="upgrader-hub-ring">
-                <div className="upgrader-hub-subtext">ЦЕЛЬ ВЫИГРЫША</div>
-                <div className="upgrader-hub-amount">
-                  ${targetWin.toFixed(2)}
-                </div>
-                <div className="upgrader-hub-badges">
-                  <span className="upgrader-badge-mult">
-                    x{multiplier.toFixed(2)}
-                  </span>
-                  <span className="upgrader-badge-chance">
+                <div className="upgrader-hub-content">
+                  <div className="upgrader-hub-main-percent">
                     {winChance.toFixed(2)}%
-                  </span>
+                  </div>
+                  <div className="upgrader-hub-chance-label">
+                    {winChance < 30 ? 'низкий шанс' : (winChance < 60 ? 'средний шанс' : 'высокий шанс')}
+                  </div>
+                  <div className="upgrader-hub-payout-box">
+                    <span className="upgrader-hub-target-val">${targetWin.toFixed(2)}</span>
+                    <span className="upgrader-hub-mult-tag">x{multiplier.toFixed(2)}</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Result Alert / Celebration Overlay */}
-          {showWinBox && lastResult && (
+          {showWinBox && !isBetModalOpen && lastResult && (
             <div
-              className={`upgrader-result-badge ${lastResult.isWin ? 'win' : 'lose'} ${isClosingWinBox ? 'closing' : ''}`}
+              className={`mines-win-box ${lastResult.isWin ? 'win' : 'loss'} ${isClosingWinBox ? 'closing' : ''}`}
               onClick={dismissWinBox}
             >
-              {lastResult.isWin ? (
-                <>
-                  <span className="upgrader-result-title">ВЫИГРЫШ</span>
-                  <span className="upgrader-result-val">
-                    +${lastResult.winAmount.toFixed(2)}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <span className="upgrader-result-title" style={{ color: '#ff4d4d' }}>
-                    ПРОИГРЫШ
-                  </span>
-                  <span className="upgrader-result-val" style={{ color: '#8a8f99' }}>
-                    Стрелка вне сектора
-                  </span>
-                </>
-              )}
+              <span className="mines-win-label">{lastResult.isWin ? 'Выигрыш' : 'Проигрыш'}</span>
+              <span className="mines-win-value">
+                {lastResult.isWin ? `+$${lastResult.winAmount.toFixed(2)}` : `-$${betAmount.toFixed(2)}`}
+              </span>
+              <span className="mines-win-multiplier">
+                {lastResult.isWin ? `x${Number(multiplier.toFixed(2))}` : '0.00x'}
+              </span>
             </div>
           )}
         </div>
@@ -532,68 +579,64 @@ export default function UpgradeGame({ onBack }) {
               </button>
             </div>
 
-            {/* Compact Amount & Quick Chips Row */}
-            <div className="upg-compact-input-row">
-              <div className="upg-input-field">
-                <span className="upg-input-prefix" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <TetherIcon size={18} />
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0.15"
-                  className="upg-number-input"
-                  value={betAmount === 0 ? '' : betAmount}
-                  placeholder="1.00"
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    if (raw === '') return setBetAmount(0);
-                    const val = parseFloat(raw);
-                    if (isNaN(val)) setBetAmount(0);
-                    else setBetAmount(Math.min(balance > 0 ? balance : 1000, val));
-                  }}
-                />
-              </div>
+            {/* Input Card */}
+            <div className="upg-input-card">
+              <span className="upg-input-prefix">
+                <TetherIcon size={18} />
+              </span>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0.15"
+                className="upg-number-input"
+                value={betAmount === 0 ? '' : betAmount}
+                placeholder="1.00"
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  if (raw === '') return setBetAmount(0);
+                  const val = parseFloat(raw);
+                  if (isNaN(val)) setBetAmount(0);
+                  else setBetAmount(Math.min(balance > 0 ? balance : 1000, val));
+                }}
+              />
+            </div>
 
-              {/* Quick Chips inline */}
-              <div className="upg-quick-chips">
-                {[0.5, 1, 5].map(amt => (
-                  <button
-                    key={amt}
-                    type="button"
-                    className={`upg-chip-btn ${betAmount === amt ? 'active' : ''}`}
-                    onClick={() => {
-                      try { bjAudio.playChip(); } catch (e) {}
-                      setBetAmount(amt);
-                    }}
-                  >
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                      <TetherIcon size={13} /> {amt}
-                    </span>
-                  </button>
-                ))}
+            {/* Symmetrical Quick Chips Grid (All 5 buttons perfectly even) */}
+            <div className="upg-quick-chips-grid">
+              {[0.5, 1, 5].map(amt => (
                 <button
+                  key={amt}
                   type="button"
-                  className="upg-chip-btn"
+                  className={`upg-chip-btn ${betAmount === amt ? 'active' : ''}`}
                   onClick={() => {
                     try { bjAudio.playChip(); } catch (e) {}
-                    setBetAmount(prev => Math.min(balance > 0 ? balance : 1000, parseFloat(((Number(prev) || 0) * 2).toFixed(2))));
+                    setBetAmount(amt);
                   }}
                 >
-                  2X
+                  <TetherIcon size={13} /> {amt}
                 </button>
-                <button
-                  type="button"
-                  className="upg-chip-btn"
-                  onClick={() => {
-                    try { bjAudio.playChip(); } catch (e) {}
-                    setBetAmount(prev => Math.max(0.15, parseFloat(((Number(prev) || 0) / 2).toFixed(2))));
-                  }}
-                >
-                  ½
-                </button>
-              </div>
+              ))}
+              <button
+                type="button"
+                className="upg-chip-btn"
+                onClick={() => {
+                  try { bjAudio.playChip(); } catch (e) {}
+                  setBetAmount(prev => Math.max(0.15, parseFloat(((Number(prev) || 0) / 2).toFixed(2))));
+                }}
+              >
+                ½
+              </button>
+              <button
+                type="button"
+                className="upg-chip-btn"
+                onClick={() => {
+                  try { bjAudio.playChip(); } catch (e) {}
+                  setBetAmount(prev => Math.min(balance > 0 ? balance : 1000, parseFloat(((Number(prev) || 0) * 2).toFixed(2))));
+                }}
+              >
+                2X
+              </button>
             </div>
 
             {/* Compact Chance & Multiplier Card */}
@@ -630,13 +673,13 @@ export default function UpgradeGame({ onBack }) {
                         type="number"
                         step="1"
                         min="1"
-                        max="95"
+                        max="75"
                         className="upg-step-input"
                         value={chancePercent}
                         onChange={(e) => {
                           const val = parseFloat(e.target.value);
                           if (!isNaN(val)) {
-                            const clamped = Math.max(0.5, Math.min(95, val));
+                            const clamped = Math.max(0.5, Math.min(75, val));
                             setChancePercent(clamped);
                             setMultiplier(parseFloat((100 / clamped).toFixed(2)));
                           }
@@ -678,16 +721,16 @@ export default function UpgradeGame({ onBack }) {
                       <input
                         type="number"
                         step="0.1"
-                        min="1.05"
+                        min="1.33"
                         max="500"
                         className="upg-step-input"
                         value={multiplier}
                         onChange={(e) => {
                           const val = parseFloat(e.target.value);
                           if (!isNaN(val)) {
-                            const clamped = Math.max(1.05, Math.min(500, val));
+                            const clamped = Math.max(1.33, Math.min(500, val));
                             setMultiplier(clamped);
-                            setChancePercent(parseFloat((100 / clamped).toFixed(2)));
+                            setChancePercent(Math.min(75, parseFloat((100 / clamped).toFixed(2))));
                           }
                         }}
                       />

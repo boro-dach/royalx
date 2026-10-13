@@ -354,7 +354,6 @@ export default function MinesGame({ onBack }) {
       const revealedTiles = currentTiles.map(t => ({ ...t, revealed: true }));
       setTiles(revealedTiles);
       setGameState('lost');
-      setShowWinBox(false);
       processBetForCashback(betAmount);
       recordGameBet({
         game: 'Mines',
@@ -363,7 +362,12 @@ export default function MinesGame({ onBack }) {
         isWin: false,
         multiplier: 0
       });
-      showToast('💥 Взрыв! Раунд проигран', true);
+      setWinBoxData({
+        isWin: false,
+        amount: betAmount,
+        mult: 0
+      });
+      setShowWinBox(true);
       recordRoundOutcome(0.00, false);
     } else {
       // Found a safe gem!
@@ -402,6 +406,7 @@ export default function MinesGame({ onBack }) {
     setTiles(prev => prev.map(t => ({ ...t, revealed: true })));
     setGameState('won');
     setWinBoxData({
+      isWin: true,
       amount: winAmt,
       mult: finalMult
     });
@@ -421,7 +426,6 @@ export default function MinesGame({ onBack }) {
       });
     } catch (e) {}
 
-    showToast(`🎉 Выигрыш +$${winAmt.toFixed(2)} (x${finalMult})!`);
     recordRoundOutcome(finalMult, true);
   };
 
@@ -508,18 +512,22 @@ export default function MinesGame({ onBack }) {
             })}
           </div>
 
-          {/* Victory Central Result Box */}
-          {showWinBox && (
+          {/* Victory / Defeat Central Result Box */}
+          {showWinBox && !isBetModalOpen && (
             <div 
-              className={`mines-win-box ${isClosingWinBox ? 'closing' : ''}`}
+              className={`mines-win-box ${winBoxData.isWin ? 'win' : 'loss'} ${isClosingWinBox ? 'closing' : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
                 dismissWinBox();
               }}
             >
-              <span className="mines-win-label">Выигрыш</span>
-              <span className="mines-win-value">${winBoxData.amount.toFixed(2)}</span>
-              <span className="mines-win-multiplier">x{Number(winBoxData.mult.toFixed(2))}</span>
+              <span className="mines-win-label">{winBoxData.isWin ? 'Выигрыш' : 'Проигрыш'}</span>
+              <span className="mines-win-value">
+                {winBoxData.isWin ? `+$${winBoxData.amount.toFixed(2)}` : `-$${winBoxData.amount.toFixed(2)}`}
+              </span>
+              <span className="mines-win-multiplier">
+                {winBoxData.isWin ? `x${Number(winBoxData.mult.toFixed(2))}` : '0.00x'}
+              </span>
             </div>
           )}
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import confetti from 'canvas-confetti';
 import { useApp } from '../../context/AppContext';
 import { bjAudio } from '../../utils/blackjackAudio';
 import { CloseIcon, TetherIcon } from '../common/Icons';
@@ -149,11 +150,29 @@ export default function BlackjackGame({ onBack }) {
   );
 
   const [gameState, setGameState] = useState(activeSession ? 'player_turn' : 'idle'); // 'idle', 'dealing', 'player_turn', 'dealer_turn'
-  const [roundResult, setRoundResult] = useState(activeSession ? null : {
-    type: 'dealer-won',
-    title: 'ДИЛЕР ВЫИГРАЛ',
-    sub: 'У дилера 20'
-  });
+  const [roundResult, setRoundResult] = useState(null);
+  const [isClosingResult, setIsClosingResult] = useState(false);
+  const resultTimerRef = useRef(null);
+
+  const dismissResult = () => {
+    if (resultTimerRef.current) clearTimeout(resultTimerRef.current);
+    setIsClosingResult(true);
+    setTimeout(() => {
+      setRoundResult(null);
+      setIsClosingResult(false);
+    }, 200);
+  };
+
+  useEffect(() => {
+    if (roundResult) {
+      setIsClosingResult(false);
+      if (resultTimerRef.current) clearTimeout(resultTimerRef.current);
+      resultTimerRef.current = setTimeout(dismissResult, 2600);
+      return () => {
+        if (resultTimerRef.current) clearTimeout(resultTimerRef.current);
+      };
+    }
+  }, [roundResult]);
 
   const [betAmount, setBetAmount] = useState(1);
   const [lastBet, setLastBet] = useState(15);
@@ -205,6 +224,7 @@ export default function BlackjackGame({ onBack }) {
 
   const openBetModal = () => {
     if (gameState !== 'idle') return;
+    if (roundResult) dismissResult();
     setIsBetModalOpen(true);
   };
 
@@ -318,9 +338,11 @@ export default function BlackjackGame({ onBack }) {
             return next;
           });
           setRoundResult({
+            isWin: 'push',
             type: 'push',
-            title: 'НИЧЬЯ',
-            sub: `Возврат ставки $${amountToBet}`
+            title: 'Ничья',
+            amount: 0,
+            mult: 'Возврат'
           });
         } else {
           // Natural Blackjack 3:2 payout!
@@ -334,11 +356,21 @@ export default function BlackjackGame({ onBack }) {
           });
           bjAudio.playWin();
           setRoundResult({
-            type: 'player-won',
-            title: 'БЛЭКДЖЕК! 🃏',
-            sub: `+$${winAmount.toFixed(2)} (3:2)`
+            isWin: true,
+            type: 'win',
+            title: 'Блэкджек!',
+            amount: winAmount,
+            mult: '3:2'
           });
-          showToast(`🎉 Блэкджек! Выигрыш +$${winAmount.toFixed(2)}!`);
+          try {
+            confetti({
+              particleCount: 55,
+              spread: 70,
+              origin: { y: 0.55 },
+              zIndex: 999999,
+              colors: ['#00e699', '#38ef7d', '#00ffc8', '#ffffff', '#ffd200']
+            });
+          } catch (e) {}
         }
         setGameState('idle');
       } else {
@@ -383,9 +415,11 @@ export default function BlackjackGame({ onBack }) {
         multiplier: 0
       });
       setRoundResult({
-        type: 'dealer-won',
-        title: 'ДИЛЕР ВЫИГРАЛ',
-        sub: `Перебор (${score})`
+        isWin: false,
+        type: 'loss',
+        title: 'Проигрыш',
+        amount: activeHandBet,
+        mult: `Перебор (${score})`
       });
       processBetForCashback(activeHandBet);
       setGameState('idle');
@@ -463,11 +497,21 @@ export default function BlackjackGame({ onBack }) {
             });
             bjAudio.playWin();
             setRoundResult({
-              type: 'player-won',
-              title: 'ВЫ ВЫИГРАЛИ',
-              sub: `У дилера перебор (${dScore})`
+              isWin: true,
+              type: 'win',
+              title: 'Выигрыш',
+              amount: winAmount,
+              mult: 'x2.00'
             });
-            showToast(`🎉 Выигрыш +$${winAmount.toFixed(2)}!`);
+            try {
+              confetti({
+                particleCount: 55,
+                spread: 70,
+                origin: { y: 0.55 },
+                zIndex: 999999,
+                colors: ['#00e699', '#38ef7d', '#00ffc8', '#ffffff', '#ffd200']
+              });
+            } catch (e) {}
           } else if (dScore > pScore) {
             // Dealer Win
             recordGameBet({
@@ -479,9 +523,11 @@ export default function BlackjackGame({ onBack }) {
             });
             bjAudio.playLose();
             setRoundResult({
-              type: 'dealer-won',
-              title: 'ДИЛЕР ВЫИГРАЛ',
-              sub: `У дилера ${dScore}`
+              isWin: false,
+              type: 'loss',
+              title: 'Проигрыш',
+              amount: currentBet,
+              mult: `Дилер (${dScore})`
             });
             processBetForCashback(currentBet);
           } else if (pScore > dScore) {
@@ -496,11 +542,21 @@ export default function BlackjackGame({ onBack }) {
             });
             bjAudio.playWin();
             setRoundResult({
-              type: 'player-won',
-              title: 'ВЫ ВЫИГРАЛИ',
-              sub: `+$${winAmount.toFixed(2)} (x2)`
+              isWin: true,
+              type: 'win',
+              title: 'Выигрыш',
+              amount: winAmount,
+              mult: 'x2.00'
             });
-            showToast(`🎉 Выигрыш +$${winAmount.toFixed(2)}!`);
+            try {
+              confetti({
+                particleCount: 55,
+                spread: 70,
+                origin: { y: 0.55 },
+                zIndex: 999999,
+                colors: ['#00e699', '#38ef7d', '#00ffc8', '#ffffff', '#ffd200']
+              });
+            } catch (e) {}
           } else {
             // Push (Tie)
             setBalance(prev => {
@@ -509,9 +565,11 @@ export default function BlackjackGame({ onBack }) {
               return next;
             });
             setRoundResult({
+              isWin: 'push',
               type: 'push',
-              title: 'НИЧЬЯ',
-              sub: `Возврат ставки $${currentBet}`
+              title: 'Ничья',
+              amount: 0,
+              mult: 'Возврат'
             });
           }
           setGameState('idle');
@@ -628,11 +686,23 @@ export default function BlackjackGame({ onBack }) {
           </div>
         </div>
 
-        {/* Central Notification / Result Card */}
-        {roundResult && (
-          <div className={`bj-result-card ${roundResult.type}`}>
-            <div className="bj-result-title">{roundResult.title}</div>
-            <div className="bj-result-sub">{roundResult.sub}</div>
+        {/* Central Result Box (Win, Loss or Push like in Mines) */}
+        {roundResult && !isBetModalOpen && (
+          <div 
+            className={`mines-win-box ${roundResult.type} ${isClosingResult ? 'closing' : ''}`}
+            onClick={dismissResult}
+          >
+            <span className="mines-win-label">{roundResult.title}</span>
+            <span className="mines-win-value">
+              {roundResult.type === 'win'
+                ? `+$${roundResult.amount.toFixed(2)}`
+                : roundResult.type === 'loss'
+                ? `-$${roundResult.amount.toFixed(2)}`
+                : `$${roundResult.amount.toFixed(2)}`}
+            </span>
+            <span className="mines-win-multiplier">
+              {roundResult.mult}
+            </span>
           </div>
         )}
 

@@ -46,8 +46,8 @@ export default function MainTab() {
       id: 'boxes',
       tag: 'NEW',
       title: 'БОКСЫ',
-      highlight: 'от 0.25 до 200 USDT',
-      subtext: '5 уровней кейсов'
+      highlight: 'от 0.25 до 500 USDT',
+      subtext: '6 уровней кейсов'
     }
   ];
 

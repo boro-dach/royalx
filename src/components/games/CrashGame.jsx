@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
+import confetti from 'canvas-confetti';
 import { useApp } from '../../context/AppContext';
 import { bjAudio } from '../../utils/blackjackAudio';
 import { CloseIcon, TetherIcon } from '../common/Icons';
 import GameHeader from './GameHeader';
 import './Games.css';
+
+const AUTOCASHOUT_PRESETS = [1.2, 1.5, 2.0, 3.0, 5.0, 10.0];
 
 // Color tiers matching black-green aesthetic: Green -> Emerald -> Gold -> Orange -> Magenta -> Cosmic Purple
 export function getMultiplierTier(val) {
@@ -62,8 +65,6 @@ export function getMultiplierTier(val) {
   };
 }
 
-export const AUTOCASHOUT_PRESETS = [1.2, 1.5, 2.0, 3.0, 5.0, 10.0];
-
 export default function CrashGame({ onBack }) {
   const {
     balance,
@@ -72,12 +73,33 @@ export default function CrashGame({ onBack }) {
     recordGameBet,
     showToast,
     processBetForCashback,
-    processBetForPass
+    processBetForPass,
+    tgUser,
+    userStats,
+    userRtp,
+    adminSettings,
+    historyItems
   } = useApp();
 
+  const currentUserId = tgUser?.id || '8281274109';
+
   const [betAmount, setBetAmount] = useState(1);
-  const [autoCashout, setAutoCashout] = useState(2.0);
-  const [autoCashoutEnabled, setAutoCashoutEnabled] = useState(false);
+  const [autoCashout, setAutoCashout] = useState(() => {
+    try {
+      const saved = localStorage.getItem('crash_auto_cashout');
+      return saved ? parseFloat(saved) : 2.0;
+    } catch (e) {
+      return 2.0;
+    }
+  });
+  const [autoCashoutEnabled, setAutoCashoutEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem('crash_auto_cashout_enabled');
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch (e) {
+      return true;
+    }
+  });
 
   // Real-time server synchronized game state (24/7 continuous engine)
   const [serverRoundId, setServerRoundId] = useState(1);
@@ -125,28 +147,24 @@ export default function CrashGame({ onBack }) {
     ];
   });
 
-  // 2-second visual loading overlay upon entering Crash
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [isLoaderFading, setIsLoaderFading] = useState(false);
-
-  useEffect(() => {
-    let removeTimer = null;
-    const fadeTimer = setTimeout(() => {
-      setIsLoaderFading(true);
-      removeTimer = setTimeout(() => {
-        setIsInitialLoading(false);
-      }, 350);
-    }, 2000); // Exactly 2 seconds visual overlay
-
-    return () => {
-      clearTimeout(fadeTimer);
-      if (removeTimer) clearTimeout(removeTimer);
-    };
-  }, []);
-
   // Modal State
   const [isBetModalOpen, setIsBetModalOpen] = useState(false);
   const [isClosingBetModal, setIsClosingBetModal] = useState(false);
+
+  // Result Box State (Matching Mines)
+  const [showResultBox, setShowResultBox] = useState(false);
+  const [isClosingResultBox, setIsClosingResultBox] = useState(false);
+  const [resultBoxData, setResultBoxData] = useState({ isWin: false, amount: 0, mult: 1 });
+  const resultBoxTimerRef = useRef(null);
+
+  const dismissResultBox = () => {
+    if (resultBoxTimerRef.current) clearTimeout(resultBoxTimerRef.current);
+    setIsClosingResultBox(true);
+    setTimeout(() => {
+      setShowResultBox(false);
+      setIsClosingResultBox(false);
+    }, 200);
+  };
 
   // Canvas & animation refs
   const canvasRef = useRef(null);
@@ -154,10 +172,23 @@ export default function CrashGame({ onBack }) {
   const multRef = useRef(1.00);
   const historyBarRef = useRef(null);
 
-  // Clock sync refs
+  const isCashingOutRef = useRef(false);
+  const lastRenderedMultRef = useRef(1.00);
+  const rocketImgRef = useRef(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.src = '/crash-rocket.png';
+    img.onload = () => {
+      rocketImgRef.current = img;
+    };
+  }, []);
+
+  // Clock sync & stale packet guards
   const serverStartTimeRef = useRef(0);
   const clientClockOffsetRef = useRef(0);
-  const crashedAtRef = useRef(null);
+  const lastServerRoundIdRef = useRef(0);
+  const lastServerTimeRef = useRef(0);
 
   // Mutable state refs to avoid effect re-creation
   const activeBetRef = useRef(activeBet);
@@ -175,13 +206,15 @@ export default function CrashGame({ onBack }) {
   const prevStatusRef = useRef(null);
 
   // Connect to 24/7 Server SSE Stream and Sync State
+  const processedRoundsRef = useRef(new Set());
+
   useEffect(() => {
     let evtSource = null;
-    let fallbackInterval = null;
-    let sseReconnectTimer = null;
+    let pollTimer = null;
+    let isSubscribed = true;
 
     const handleServerUpdate = (data) => {
-      if (!data) return;
+      if (!isSubscribed || !data || typeof data.roundId !== 'number') return;
       const { 
         roundId, 
         status, 
@@ -193,30 +226,17 @@ export default function CrashGame({ onBack }) {
         serverTime 
       } = data;
 
+      // Drop stale / out-of-order packets
+      if (roundId < lastServerRoundIdRef.current) return;
+      if (roundId === lastServerRoundIdRef.current && serverTime && serverTime < lastServerTimeRef.current) return;
+
+      const isNewRound = lastServerRoundIdRef.current !== 0 && lastServerRoundIdRef.current !== roundId;
+      lastServerRoundIdRef.current = roundId;
+      if (serverTime) lastServerTimeRef.current = serverTime;
+
       setServerRoundId(roundId);
       setGameState(status);
       setCountdown(sCountdown ?? 0);
-
-      // Validate active bet round ID: if round has already passed, clear expired active bet!
-      if (activeBetRef.current && activeBetRef.current.roundId && activeBetRef.current.roundId !== roundId) {
-        setActiveBet(null);
-        activeBetRef.current = null;
-        try { localStorage.removeItem('crash_active_bet'); } catch (e) {}
-      }
-
-      // Validate queued bet: if target round has already passed while offline, refund!
-      if (queuedBetRef.current && queuedBetRef.current.targetRoundId && queuedBetRef.current.targetRoundId < roundId) {
-        const refundAmt = queuedBetRef.current.amount;
-        setBalance(prev => {
-          const next = parseFloat((prev + refundAmt).toFixed(2));
-          syncBalance(next);
-          return next;
-        });
-        setQueuedBet(null);
-        queuedBetRef.current = null;
-        try { localStorage.removeItem('crash_queued_bet'); } catch (e) {}
-        showToast(`ℹ️ Раунд #${roundId} уже прошел. Ставка $${refundAmt} возвращена на баланс!`);
-      }
 
       if (sHistory && Array.isArray(sHistory) && sHistory.length > 0) {
         setHistory(sHistory);
@@ -230,52 +250,72 @@ export default function CrashGame({ onBack }) {
         if (serverTime) {
           clientClockOffsetRef.current = serverTime - Date.now();
         }
+      } else if (status === 'waiting') {
+        serverStartTimeRef.current = 0;
       }
 
-      // Transition to CRASHED
-      if (status === 'crashed' && prevStatusRef.current !== 'crashed') {
+      // Transition to CRASHED - round crashed for everyone at target crash point!
+      if (status === 'crashed') {
         const finalVal = crashedAt || sMult || 1.00;
-        crashedAtRef.current = finalVal;
         multRef.current = finalVal;
         setMultiplier(finalVal);
-        if (prevStatusRef.current) {
-          try { bjAudio.playExplosion(); } catch (e) {}
-        }
 
-        // Handle active bet: check if autoCashout was achieved before crash!
-        const curActive = activeBetRef.current;
-        if (curActive && !curActive.cashedOut && curActive.roundId === roundId) {
-          if (curActive.autoCashout && finalVal >= curActive.autoCashout) {
-            handleCashout(curActive.autoCashout);
-          } else {
-            processBetForCashback(curActive.amount);
-            recordGameBet({
-              game: 'Crash',
-              betAmount: curActive.amount,
-              winAmount: 0,
-              isWin: false,
-              multiplier: 0
-            });
-            showToast(`💥 Краш на x${finalVal.toFixed(2)}! Ставка потеряна`, true);
-            setActiveBet(null);
-            activeBetRef.current = null;
-            try { localStorage.removeItem('crash_active_bet'); } catch (e) {}
+        if (!processedRoundsRef.current.has(roundId)) {
+          processedRoundsRef.current.add(roundId);
+          if (prevStatusRef.current === 'flying') {
+            try { bjAudio.playExplosion(); } catch (e) {}
+          }
+
+          // Handle active bet with guaranteed auto-cashout check
+          const curActive = activeBetRef.current;
+          const isRtpLose = Boolean(
+            userRtp === 'lose' ||
+            (adminSettings && (adminSettings.globalRtp === 'lose' || adminSettings.crashRtp === 'lose'))
+          );
+          if (curActive && !curActive.cashedOut && curActive.roundId === roundId) {
+            const targetAuto = curActive.autoCashout ? parseFloat(curActive.autoCashout) : null;
+            if (targetAuto && finalVal >= targetAuto && !isRtpLose) {
+              handleCashout(targetAuto);
+            } else {
+              processBetForCashback(curActive.amount);
+              recordGameBet({
+                game: 'Crash',
+                betAmount: curActive.amount,
+                winAmount: 0,
+                isWin: false,
+                multiplier: 0
+              });
+              // Show beautiful loss window (no top toast!)
+              setResultBoxData({
+                isWin: false,
+                amount: curActive.amount,
+                mult: 0
+              });
+              setIsClosingResultBox(false);
+              setShowResultBox(true);
+              if (resultBoxTimerRef.current) clearTimeout(resultBoxTimerRef.current);
+              resultBoxTimerRef.current = setTimeout(dismissResultBox, 2600);
+
+              setActiveBet(null);
+              activeBetRef.current = null;
+              localStorage.removeItem('crash_active_bet');
+            }
           }
         }
       }
 
       // Transition to WAITING (New Round Countdown Started)
       if (status === 'waiting') {
-        serverStartTimeRef.current = 0;
-        crashedAtRef.current = null;
+        lastRenderedMultRef.current = 1.00;
         multRef.current = 1.00;
         setMultiplier(1.00);
+        serverStartTimeRef.current = 0;
 
-        // Clear finished active bet from previous round
-        if (activeBetRef.current && activeBetRef.current.roundId !== roundId) {
+        // Clear expired bet from previous round
+        if (activeBetRef.current && (activeBetRef.current.cashedOut || (activeBetRef.current.roundId && activeBetRef.current.roundId < roundId))) {
           setActiveBet(null);
           activeBetRef.current = null;
-          try { localStorage.removeItem('crash_active_bet'); } catch (e) {}
+          localStorage.removeItem('crash_active_bet');
         }
 
         // Move queued bet to active bet for this newly started round!
@@ -292,21 +332,59 @@ export default function CrashGame({ onBack }) {
           activeBetRef.current = newActive;
           setQueuedBet(null);
           queuedBetRef.current = null;
-          try {
-            localStorage.setItem('crash_active_bet', JSON.stringify(newActive));
-            localStorage.removeItem('crash_queued_bet');
-          } catch (e) {}
+          localStorage.setItem('crash_active_bet', JSON.stringify(newActive));
+          localStorage.removeItem('crash_queued_bet');
           try { bjAudio.playChip(); } catch (e) {}
-          showToast(`🎯 Ставка $${q.amount} активна в раунде #${roundId}!`);
+
+          // Notify server of activated bet
+          try {
+            fetch('/api/crash/bet', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: currentUserId,
+                amount: q.amount,
+                autoCashout: q.autoCashout,
+                roundId: roundId
+              })
+            }).catch(() => {});
+          } catch (e) {}
         }
       }
 
       // Transition to FLYING
-      if (status === 'flying' && prevStatusRef.current !== 'flying') {
+      if (status === 'flying') {
+        // If it's a new round, or if multRef was still holding the old crashed multiplier (e.g. > sMult + 0.3)
+        if (isNewRound || multRef.current > (sMult || 1.00) + 0.3 || (prevStatusRef.current !== 'flying' && sMult < multRef.current)) {
+          multRef.current = sMult || 1.00;
+          setMultiplier(sMult || 1.00);
+        } else if (sMult && sMult > multRef.current) {
+          multRef.current = sMult;
+          setMultiplier(sMult);
+        }
+
+        // Real-time server packet auto-cashout check
+        const curMult = sMult || multRef.current || 1.00;
         const curActive = activeBetRef.current;
-        if (curActive && !curActive.cashedOut && curActive.roundId === roundId) {
-          processBetForPass(curActive.amount, `crash_${roundId}`);
-          try { bjAudio.playCard(); } catch (e) {}
+        const isRtpLose = Boolean(
+          userRtp === 'lose' ||
+          (adminSettings && (adminSettings.globalRtp === 'lose' || adminSettings.crashRtp === 'lose'))
+        );
+        if (
+          curActive &&
+          !curActive.cashedOut &&
+          curActive.autoCashout &&
+          curMult >= curActive.autoCashout &&
+          !isRtpLose
+        ) {
+          handleCashout(curActive.autoCashout);
+        }
+
+        if (prevStatusRef.current !== 'flying') {
+          if (curActive && !curActive.cashedOut) {
+            processBetForPass(curActive.amount, `crash_${roundId}`);
+            try { bjAudio.playCard(); } catch (e) {}
+          }
         }
       }
 
@@ -314,8 +392,12 @@ export default function CrashGame({ onBack }) {
     };
 
     const fetchState = async () => {
+      if (!isSubscribed) return;
       try {
-        const res = await fetch('/api/crash/state');
+        const res = await fetch(`/api/crash/state?t=${Date.now()}`, {
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache, no-store' }
+        });
         if (res.ok) {
           const data = await res.json();
           handleServerUpdate(data);
@@ -324,6 +406,7 @@ export default function CrashGame({ onBack }) {
     };
 
     const connectSSE = () => {
+      if (!isSubscribed) return;
       try {
         evtSource = new EventSource('/api/crash/stream');
 
@@ -339,30 +422,33 @@ export default function CrashGame({ onBack }) {
             evtSource.close();
             evtSource = null;
           }
-          if (!fallbackInterval) {
-            fallbackInterval = setInterval(fetchState, 350);
+          if (isSubscribed) {
+            setTimeout(connectSSE, 2000);
           }
-          if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
-          sseReconnectTimer = setTimeout(connectSSE, 3000);
         };
-      } catch (e) {
-        if (!fallbackInterval) {
-          fallbackInterval = setInterval(fetchState, 350);
-        }
-      }
+      } catch (e) {}
     };
 
-    // Start active polling interval immediately to guarantee instant rounds on first launch
+    // Instant initial fetch + high-frequency heartbeat polling every 350ms
     fetchState();
-    setTimeout(fetchState, 150);
-    fallbackInterval = setInterval(fetchState, 500);
-
     connectSSE();
+    pollTimer = setInterval(fetchState, 350);
+
+    // Refresh immediately on tab focus or screen wake
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        fetchState();
+      }
+    };
+    window.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', fetchState);
 
     return () => {
+      isSubscribed = false;
       if (evtSource) evtSource.close();
-      if (fallbackInterval) clearInterval(fallbackInterval);
-      if (sseReconnectTimer) clearTimeout(sseReconnectTimer);
+      if (pollTimer) clearInterval(pollTimer);
+      window.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', fetchState);
     };
   }, []);
 
@@ -405,7 +491,7 @@ export default function CrashGame({ onBack }) {
     return () => ro.disconnect();
   }, []);
 
-  // Dedicated Upward-Rising Pulse Animation Loop (Smooth 60fps)
+  // Dedicated Silky-Smooth 60/120fps Continuous Trajectory Animation Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -416,13 +502,49 @@ export default function CrashGame({ onBack }) {
     const render = (now) => {
       if (!running) return;
 
+      // 1. Calculate Continuous Float Multiplier FIRST
+      let continuousMult = multRef.current || 1.00;
+      if (gameState === 'flying') {
+        const sStart = serverStartTimeRef.current;
+        if (sStart && sStart > 0) {
+          const elapsed = Math.max(0, (Date.now() - (sStart - (clientClockOffsetRef.current || 0))) / 1000);
+          continuousMult = Math.max(1.00, Math.pow(Math.E, 0.16 * elapsed));
+        }
+        multRef.current = continuousMult;
+
+        // Auto-cashout trigger (continuous float check)
+        const curActive = activeBetRef.current;
+        const isRtpLose = Boolean(
+          userRtp === 'lose' ||
+          (adminSettings && (adminSettings.globalRtp === 'lose' || adminSettings.crashRtp === 'lose'))
+        );
+        if (
+          curActive &&
+          !curActive.cashedOut &&
+          curActive.autoCashout &&
+          continuousMult >= curActive.autoCashout &&
+          !isRtpLose
+        ) {
+          handleCashout(curActive.autoCashout);
+        }
+
+        // Throttled UI state multiplier update (prevents React 60fps re-render lag)
+        const rounded2 = parseFloat(continuousMult.toFixed(2));
+        if (Math.abs(rounded2 - lastRenderedMultRef.current) >= 0.01) {
+          lastRenderedMultRef.current = rounded2;
+          setMultiplier(rounded2);
+        }
+      } else if (gameState === 'crashed') {
+        continuousMult = multRef.current || 1.00;
+      }
+
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
 
       if (width > 0 && height > 0) {
         ctx.clearRect(0, 0, width, height);
 
-        // 1. Sleek Minimalist Tech Background (Dark telemetry backdrop)
+        // Tech Background
         const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
         bgGrad.addColorStop(0, '#0c0f1a');
         bgGrad.addColorStop(0.55, '#080a13');
@@ -430,22 +552,22 @@ export default function CrashGame({ onBack }) {
         ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, width, height);
 
-        // Ambient center radial glow
+        // Center radial glow
         const radGlow = ctx.createRadialGradient(width * 0.5, height * 0.42, 10, width * 0.5, height * 0.42, width * 0.65);
         radGlow.addColorStop(0, 'rgba(25, 36, 60, 0.42)');
         radGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
         ctx.fillStyle = radGlow;
         ctx.fillRect(0, 0, width, height);
 
-        // Layout Grid Dimensions
+        // Layout Dimensions
         const paddingLeft = 24;
-        const paddingRight = 24;
+        const paddingRight = 36;
         const paddingTop = 42;
         const paddingBottom = 30;
         const drawWidth = width - paddingLeft - paddingRight;
         const drawHeight = height - paddingTop - paddingBottom;
 
-        // Faint Minimalist Grid Lines
+        // Faint Grid Lines
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 6]);
@@ -456,9 +578,9 @@ export default function CrashGame({ onBack }) {
           ctx.lineTo(width - paddingRight, y);
           ctx.stroke();
         }
-        ctx.setLineDash([]); // reset
+        ctx.setLineDash([]);
 
-        // Solid bottom baseline
+        // Baseline
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.09)';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -466,7 +588,7 @@ export default function CrashGame({ onBack }) {
         ctx.lineTo(width - paddingRight, height - paddingBottom);
         ctx.stroke();
 
-        // Tick marks along baseline
+        // Baseline ticks
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
         ctx.lineWidth = 1;
         for (let x = paddingLeft; x <= width - paddingRight; x += 36) {
@@ -476,9 +598,8 @@ export default function CrashGame({ onBack }) {
           ctx.stroke();
         }
 
-        // 2. Upward Pulse Wave Dynamics
         if (gameState === 'waiting') {
-          // Minimalist resting heartbeat EKG baseline pulse along bottom
+          // Resting pulse line along baseline
           ctx.beginPath();
           const baseLineY = height - paddingBottom - 4;
           ctx.moveTo(paddingLeft, baseLineY);
@@ -500,29 +621,34 @@ export default function CrashGame({ onBack }) {
           ctx.stroke();
           ctx.shadowBlur = 0;
         } else {
-          // FLYING or CRASHED: Upward-rising energy pulse wave
-          const currentMult = multRef.current || 1.00;
-          const tier = getMultiplierTier(currentMult);
+          // FLYING or CRASHED: Ultra-smooth continuous aerodynamic curve
+          const displayMult = continuousMult || 1.00;
+          const tier = getMultiplierTier(displayMult);
           const isCrashed = gameState === 'crashed';
           const strokeColor = isCrashed ? '#ff3b3b' : tier.main;
           const glowColor = isCrashed ? 'rgba(255, 59, 59, 0.35)' : tier.glow;
 
-          const dynamicMax = Math.max(10.0, currentMult * 1.35);
-          const progress = Math.min(0.92, Math.max(0.02, Math.log(Math.max(1, currentMult)) / Math.log(dynamicMax)));
+          const dynamicMax = Math.max(10.0, displayMult * 1.35);
+          const progress = Math.min(0.92, Math.max(0.015, Math.log(Math.max(1.0001, displayMult)) / Math.log(dynamicMax)));
 
           const headX = paddingLeft + drawWidth * progress;
-          const headY = (height - paddingBottom) - drawHeight * Math.pow(progress, 0.85);
+          const headY = (height - paddingBottom) - drawHeight * Math.pow(progress, 0.82);
 
-          // Glowing area fill under wave
-          const steps = Math.max(12, Math.floor(progress * 60));
-          ctx.beginPath();
-          ctx.moveTo(paddingLeft, height - paddingBottom);
+          // Smooth curve path (NO jittery sinusoidal ripple)
+          const steps = Math.max(20, Math.floor(progress * 80));
+          const curvePts = [];
           for (let s = 0; s <= steps; s++) {
             const p = (s / steps) * progress;
-            const x = paddingLeft + drawWidth * p;
-            const baseY = (height - paddingBottom) - drawHeight * Math.pow(p, 0.85);
-            const ripple = !isCrashed ? Math.sin(p * 24 - now * 0.008) * 3.5 * p : 0;
-            ctx.lineTo(x, baseY + ripple);
+            const px = paddingLeft + drawWidth * p;
+            const py = (height - paddingBottom) - drawHeight * Math.pow(p, 0.82);
+            curvePts.push({ x: px, y: py });
+          }
+
+          // Glowing under-wave gradient area
+          ctx.beginPath();
+          ctx.moveTo(paddingLeft, height - paddingBottom);
+          for (let i = 0; i < curvePts.length; i++) {
+            ctx.lineTo(curvePts[i].x, curvePts[i].y);
           }
           ctx.lineTo(headX, height - paddingBottom);
           ctx.closePath();
@@ -533,15 +659,11 @@ export default function CrashGame({ onBack }) {
           ctx.fillStyle = fillGrad;
           ctx.fill();
 
-          // Main Upward Rising Pulse Curve Line
+          // Smooth Neon Trajectory Line
           ctx.beginPath();
           ctx.moveTo(paddingLeft, height - paddingBottom);
-          for (let s = 0; s <= steps; s++) {
-            const p = (s / steps) * progress;
-            const x = paddingLeft + drawWidth * p;
-            const baseY = (height - paddingBottom) - drawHeight * Math.pow(p, 0.85);
-            const ripple = !isCrashed ? Math.sin(p * 24 - now * 0.008) * 3.5 * p : 0;
-            ctx.lineTo(x, baseY + ripple);
+          for (let i = 0; i < curvePts.length; i++) {
+            ctx.lineTo(curvePts[i].x, curvePts[i].y);
           }
           ctx.strokeStyle = strokeColor;
           ctx.lineWidth = 3.2;
@@ -550,55 +672,63 @@ export default function CrashGame({ onBack }) {
           ctx.stroke();
           ctx.shadowBlur = 0;
 
-          // Leading Pulse Beacon & Radiating Rings at the tip
+          // Flight Angle Tangent
+          const prevP = Math.max(0, progress - 0.02);
+          const prevX = paddingLeft + drawWidth * prevP;
+          const prevY = (height - paddingBottom) - drawHeight * Math.pow(prevP, 0.82);
+          const flightAngle = Math.atan2(headY - prevY, headX - prevX);
+
           if (!isCrashed) {
-            const ring1R = 8 + (Math.sin(now * 0.009) * 0.5 + 0.5) * 12;
-            ctx.beginPath();
-            ctx.arc(headX, headY, ring1R, 0, Math.PI * 2);
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = 1.5;
-            ctx.globalAlpha = Math.max(0, 1 - ring1R / 20);
-            ctx.stroke();
-            ctx.globalAlpha = 1;
+            // Draw smooth glowing rocket / vessel at head of trajectory
+            ctx.save();
+            ctx.translate(headX, headY);
+            ctx.rotate(flightAngle);
 
-            const ring2R = 14 + (Math.sin(now * 0.009 + 1.6) * 0.5 + 0.5) * 14;
+            // Radiant thruster exhaust flame behind rocket
+            const exhaustLen = 14 + (Math.sin(now * 0.025) * 0.5 + 0.5) * 8;
+            const exhaustGrad = ctx.createLinearGradient(-10, 0, -10 - exhaustLen, 0);
+            exhaustGrad.addColorStop(0, '#ffffff');
+            exhaustGrad.addColorStop(0.3, '#ffaa00');
+            exhaustGrad.addColorStop(0.75, '#ff3b3b');
+            exhaustGrad.addColorStop(1, 'rgba(255, 59, 59, 0)');
+            ctx.fillStyle = exhaustGrad;
             ctx.beginPath();
-            ctx.arc(headX, headY, ring2R, 0, Math.PI * 2);
-            ctx.strokeStyle = strokeColor;
-            ctx.lineWidth = 1.1;
-            ctx.globalAlpha = Math.max(0, 1 - ring2R / 28);
-            ctx.stroke();
-            ctx.globalAlpha = 1;
+            ctx.moveTo(-8, -3.5);
+            ctx.lineTo(-8 - exhaustLen, 0);
+            ctx.lineTo(-8, 3.5);
+            ctx.closePath();
+            ctx.fill();
+
+            // Render rocket image or glowing futuristic jet
+            if (rocketImgRef.current && rocketImgRef.current.complete) {
+              const rSize = 36;
+              ctx.drawImage(rocketImgRef.current, -rSize * 0.5, -rSize * 0.5, rSize, rSize);
+            } else {
+              // High-tech sleek beacon
+              ctx.beginPath();
+              ctx.arc(0, 0, 5, 0, Math.PI * 2);
+              ctx.fillStyle = '#ffffff';
+              ctx.shadowColor = strokeColor;
+              ctx.shadowBlur = 12;
+              ctx.fill();
+            }
+            ctx.restore();
+          } else {
+            // CRASHED: Flash blast burst at impact coordinates
+            const blastR = 16 + (Math.sin(now * 0.015) * 0.5 + 0.5) * 8;
+            ctx.beginPath();
+            ctx.arc(headX, headY, blastR, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 59, 59, 0.25)';
+            ctx.fill();
 
             ctx.beginPath();
-            ctx.arc(headX, headY, 4.5, 0, Math.PI * 2);
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowColor = strokeColor;
-            ctx.shadowBlur = 12;
+            ctx.arc(headX, headY, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff3b3b';
+            ctx.shadowColor = '#ff3b3b';
+            ctx.shadowBlur = 16;
             ctx.fill();
             ctx.shadowBlur = 0;
           }
-        }
-      }
-
-      // Continuous flight growth loop synced to server timestamp
-      if (gameState === 'flying') {
-        const sStart = serverStartTimeRef.current || (Date.now() - 500);
-        const elapsed = Math.max(0, (Date.now() - (sStart - (clientClockOffsetRef.current || 0))) / 1000);
-        const currentMult = parseFloat(Math.pow(Math.E, 0.16 * elapsed).toFixed(2));
-        
-        multRef.current = Math.max(1.00, currentMult);
-        setMultiplier(Math.max(1.00, currentMult));
-
-        // Auto-cashout trigger
-        const curActive = activeBetRef.current;
-        if (
-          curActive &&
-          !curActive.cashedOut &&
-          curActive.autoCashout &&
-          currentMult >= curActive.autoCashout
-        ) {
-          handleCashout(curActive.autoCashout);
         }
       }
 
@@ -624,27 +754,20 @@ export default function CrashGame({ onBack }) {
       return;
     }
 
-    // Prevent placing bet if active bet already exists for waiting round
-    if (gameState === 'waiting' && activeBetRef.current && !activeBetRef.current.cashedOut) {
-      showToast('⚠️ У вас уже есть активная ставка на этот раунд!', true);
-      return;
+    let chosenAuto = null;
+    const parsedAuto = parseFloat(String(autoCashout).replace(',', '.'));
+    if (autoCashoutEnabled && !isNaN(parsedAuto) && parsedAuto >= 1.05) {
+      chosenAuto = parseFloat(parsedAuto.toFixed(2));
     }
 
-    // Prevent placing bet if already queued for next round
-    if (gameState !== 'waiting' && queuedBetRef.current) {
-      showToast('⚠️ У вас уже есть ставка в очереди на следующий раунд!', true);
-      return;
-    }
+    const canBetActive = gameState === 'waiting' && countdown >= 1.0;
 
-    const chosenAuto = autoCashoutEnabled && autoCashout ? parseFloat(Number(autoCashout).toFixed(2)) : null;
+    const nextBal = Math.max(0, parseFloat((balance - betAmount).toFixed(2)));
+    setBalance(nextBal);
+    syncBalance(nextBal);
 
-    if (gameState === 'waiting') {
-      // Round is waiting: Place active bet immediately for this upcoming flight
-      setBalance(prev => {
-        const next = Math.max(0, parseFloat((prev - betAmount).toFixed(2)));
-        syncBalance(next);
-        return next;
-      });
+    if (canBetActive) {
+      // Round is waiting with ample time: Place active bet immediately for this upcoming flight
       const newActive = {
         amount: betAmount,
         cashedOut: false,
@@ -654,26 +777,50 @@ export default function CrashGame({ onBack }) {
       };
       setActiveBet(newActive);
       activeBetRef.current = newActive;
-      try { localStorage.setItem('crash_active_bet', JSON.stringify(newActive)); } catch (e) {}
+      localStorage.setItem('crash_active_bet', JSON.stringify(newActive));
       try { bjAudio.playChip(); } catch (e) {}
       showToast(`✅ Ставка $${betAmount} принята!`);
+
+      // Notify server of active bet immediately
+      try {
+        fetch('/api/crash/bet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: currentUserId,
+            amount: betAmount,
+            autoCashout: chosenAuto,
+            roundId: serverRoundId
+          })
+        }).catch(() => {});
+      } catch (e) {}
     } else {
-      // Round is flying or crashed: Queue bet for the next round!
-      setBalance(prev => {
-        const next = Math.max(0, parseFloat((prev - betAmount).toFixed(2)));
-        syncBalance(next);
-        return next;
-      });
+      // Round is flying, crashed, or countdown is < 1.0s: Queue bet safely for the next round!
+      const targetRound = (gameState === 'waiting' ? serverRoundId + 1 : (serverRoundId ? serverRoundId + 1 : 1));
       const newQueued = {
         amount: betAmount,
-        targetRoundId: serverRoundId + 1,
+        targetRoundId: targetRound,
         autoCashout: chosenAuto
       };
       setQueuedBet(newQueued);
       queuedBetRef.current = newQueued;
-      try { localStorage.setItem('crash_queued_bet', JSON.stringify(newQueued)); } catch (e) {}
+      localStorage.setItem('crash_queued_bet', JSON.stringify(newQueued));
       try { bjAudio.playChip(); } catch (e) {}
       showToast(`⏳ Ставка $${betAmount} в очереди на следующий раунд!`);
+
+      // Notify server of queued bet for next round
+      try {
+        fetch('/api/crash/bet', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: currentUserId,
+            amount: betAmount,
+            autoCashout: chosenAuto,
+            roundId: targetRound
+          })
+        }).catch(() => {});
+      } catch (e) {}
     }
 
     closeBetModal();
@@ -681,33 +828,31 @@ export default function CrashGame({ onBack }) {
 
   // Cancel Queued Bet
   const handleCancelQueuedBet = () => {
-    const q = queuedBetRef.current;
-    if (!q) return;
-    const refundAmt = q.amount;
-    queuedBetRef.current = null;
-    setQueuedBet(null);
-    try { localStorage.removeItem('crash_queued_bet'); } catch (e) {}
+    if (!queuedBet) return;
+    const refundAmt = queuedBet.amount;
     setBalance(prev => {
       const next = parseFloat((prev + refundAmt).toFixed(2));
       syncBalance(next);
       return next;
     });
+    setQueuedBet(null);
+    queuedBetRef.current = null;
+    localStorage.removeItem('crash_queued_bet');
     showToast(`✅ Ставка $${refundAmt} отменена, средства возвращены!`);
   };
 
   // Cancel Active Bet (only allowed during 'waiting' phase before launch)
   const handleCancelActiveBet = () => {
-    const cur = activeBetRef.current;
-    if (!cur || cur.cashedOut || gameState !== 'waiting') return;
-    const refundAmt = cur.amount;
-    activeBetRef.current = null;
-    setActiveBet(null);
-    try { localStorage.removeItem('crash_active_bet'); } catch (e) {}
+    if (!activeBet || gameState !== 'waiting') return;
+    const refundAmt = activeBet.amount;
     setBalance(prev => {
       const next = parseFloat((prev + refundAmt).toFixed(2));
       syncBalance(next);
       return next;
     });
+    setActiveBet(null);
+    activeBetRef.current = null;
+    localStorage.removeItem('crash_active_bet');
     showToast(`✅ Ставка $${refundAmt} отменена, средства возвращены!`);
   };
 
@@ -715,18 +860,17 @@ export default function CrashGame({ onBack }) {
   const handleCashout = (currMult) => {
     const curActive = activeBetRef.current;
     if (!curActive || curActive.cashedOut) return;
-
-    // Immediately mark cashed out synchronously to prevent race conditions
     curActive.cashedOut = true;
-    activeBetRef.current = { ...curActive };
 
-    const multToUse = currMult || multRef.current || multiplier;
-
-    // If rocket already crashed, allow cashout ONLY if it was auto-cashout triggered before/at crash point
-    if (gameState === 'crashed' && (!curActive.autoCashout || multToUse > (crashedAtRef.current || multRef.current))) {
+    const isRtpLose = Boolean(
+      userRtp === 'lose' ||
+      (adminSettings && (adminSettings.globalRtp === 'lose' || adminSettings.crashRtp === 'lose'))
+    );
+    if (isRtpLose) {
       return;
     }
 
+    const multToUse = parseFloat(Number(currMult || multRef.current || multiplier || 1.00).toFixed(2));
     const winAmt = parseFloat((curActive.amount * multToUse).toFixed(2));
 
     try { bjAudio.playCashout(); } catch (e) {}
@@ -740,16 +884,37 @@ export default function CrashGame({ onBack }) {
       multiplier: multToUse
     });
 
-    const updated = { ...curActive, cashedOut: true, winAmount: winAmt };
+    const updated = { ...curActive, cashedOut: true, winAmount: winAmt, mult: multToUse };
     setActiveBet(updated);
     activeBetRef.current = updated;
-    try { localStorage.setItem('crash_active_bet', JSON.stringify(updated)); } catch (e) {}
+    localStorage.setItem('crash_active_bet', JSON.stringify(updated));
 
-    showToast(`🎉 Вы забрали $${winAmt.toFixed(2)} (x${multToUse.toFixed(2)})!`);
+    // Show beautiful win window (no top toast!)
+    setResultBoxData({
+      isWin: true,
+      amount: winAmt,
+      mult: multToUse
+    });
+    setIsClosingResultBox(false);
+    setShowResultBox(true);
+    if (resultBoxTimerRef.current) clearTimeout(resultBoxTimerRef.current);
+    resultBoxTimerRef.current = setTimeout(dismissResultBox, 2600);
+
+    try {
+      confetti({
+        particleCount: 55,
+        spread: 70,
+        startVelocity: 28,
+        origin: { y: 0.55 },
+        colors: ['#00e699', '#38ef7d', '#00ffc8', '#ffffff', '#ffd200'],
+        zIndex: 999999
+      });
+    } catch (e) {}
   };
 
   // Modal Handlers
   const openBetModal = () => {
+    dismissResultBox();
     setIsBetModalOpen(true);
   };
 
@@ -765,22 +930,6 @@ export default function CrashGame({ onBack }) {
 
   return (
     <div className="game-screen crash-custom-screen">
-      {/* 2-Second Visual Loading Overlay on top of Crash */}
-      {isInitialLoading && (
-        <div className={`crash-screen-loader ${isLoaderFading ? 'fade-out' : ''}`}>
-          <div className="crash-loader-content">
-            <div className="crash-loader-ring">
-              <span className="crash-loader-rocket">🚀</span>
-            </div>
-            <div className="crash-loader-title">Загрузка Краш...</div>
-            <div className="crash-loader-sub">Синхронизация с сервером 24/7</div>
-            <div className="crash-loader-progress-track">
-              <div className="crash-loader-progress-bar" />
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Top Header */}
       <GameHeader title="Краш (Crash)" onBack={onBack} />
 
@@ -801,7 +950,7 @@ export default function CrashGame({ onBack }) {
                   : `0 0 28px ${currentTier.glow}`
               }}
             >
-              {gameState === 'waiting' ? `${countdown}s` : `x${multiplier.toFixed(2)}`}
+              {gameState === 'waiting' ? `${countdown}s` : `x${(Number(multiplier) || 1.00).toFixed(2)}`}
             </div>
             <div className="crash-minimalist-status">
               {gameState === 'waiting' && `Ожидание ставок • Старт через ${countdown}с`}
@@ -816,16 +965,35 @@ export default function CrashGame({ onBack }) {
               <span className="crash-blast-emoji">💥</span>
             </div>
           )}
+
+          {/* Central Result Box (Win or Loss like in Mines) */}
+          {showResultBox && !isBetModalOpen && (
+            <div
+              className={`mines-win-box ${resultBoxData.isWin ? 'win' : 'loss'} ${isClosingResultBox ? 'closing' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                dismissResultBox();
+              }}
+            >
+              <span className="mines-win-label">{resultBoxData.isWin ? 'Выигрыш' : 'Проигрыш'}</span>
+              <span className="mines-win-value">
+                {resultBoxData.isWin ? `+$${resultBoxData.amount.toFixed(2)}` : `-$${resultBoxData.amount.toFixed(2)}`}
+              </span>
+              <span className="mines-win-multiplier">
+                {resultBoxData.isWin ? `x${Number(resultBoxData.mult.toFixed(2))}` : '0.00x'}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* History Pills Bar: Clean completed past rounds */}
         <div className="crash-history-pills-row" ref={historyBarRef}>
-          {history.map((item, idx) => {
-            const num = typeof item === 'number' ? item : item.mult;
+          {Array.isArray(history) && history.map((item, idx) => {
+            const num = typeof item === 'number' ? item : (parseFloat(item?.mult) || 1.00);
             const tier = getMultiplierTier(num);
             return (
               <div
-                key={item.id || idx}
+                key={item?.id || idx}
                 className={`crash-history-pill ${tier.tier}`}
                 style={{
                   color: tier.main,
@@ -833,7 +1001,7 @@ export default function CrashGame({ onBack }) {
                   backgroundColor: tier.bg
                 }}
               >
-                x{num.toFixed(2)}
+                x{Number(num).toFixed(2)}
               </div>
             );
           })}
@@ -847,7 +1015,7 @@ export default function CrashGame({ onBack }) {
               className="crash-huge-action-btn btn-cashout"
               onClick={() => handleCashout(multiplier)}
             >
-              Забрать ${(activeBet.amount * multiplier).toFixed(2)} (x{multiplier.toFixed(2)})
+              Забрать ${((Number(activeBet.amount) || 0) * (Number(multiplier) || 1.00)).toFixed(2)} (x${(Number(multiplier) || 1.00).toFixed(2)})
             </button>
           ) : /* 2. Waiting phase with Active Bet -> Status + CANCEL */
           gameState === 'waiting' && activeBet ? (
@@ -873,7 +1041,7 @@ export default function CrashGame({ onBack }) {
           activeBet && activeBet.cashedOut ? (
             <div className="crash-action-split-row">
               <button className="crash-huge-action-btn btn-cashed" disabled style={{ flex: 1 }}>
-                +${activeBet.winAmount.toFixed(2)} 🏆
+                +${(Number(activeBet.winAmount) || 0).toFixed(2)} 🏆
               </button>
               <button 
                 className="mines-bet-trigger-btn" 
@@ -1010,7 +1178,13 @@ export default function CrashGame({ onBack }) {
                 <button
                   type="button"
                   className={`crash-ton-toggle-switch ${autoCashoutEnabled ? 'active' : ''}`}
-                  onClick={() => setAutoCashoutEnabled(prev => !prev)}
+                  onClick={() => {
+                    setAutoCashoutEnabled(prev => {
+                      const next = !prev;
+                      try { localStorage.setItem('crash_auto_cashout_enabled', JSON.stringify(next)); } catch (e) {}
+                      return next;
+                    });
+                  }}
                 >
                   <span className="crash-ton-toggle-knob" />
                 </button>
@@ -1024,7 +1198,13 @@ export default function CrashGame({ onBack }) {
                       <button
                         type="button"
                         className="crash-ton-step-btn"
-                        onClick={() => setAutoCashout(prev => Math.max(1.1, parseFloat((prev - 0.1).toFixed(2))))}
+                        onClick={() => {
+                          setAutoCashout(prev => {
+                            const next = Math.max(1.1, parseFloat((prev - 0.1).toFixed(2)));
+                            try { localStorage.setItem('crash_auto_cashout', String(next)); } catch (e) {}
+                            return next;
+                          });
+                        }}
                       >
                         –
                       </button>
@@ -1034,27 +1214,28 @@ export default function CrashGame({ onBack }) {
                         min="1.1"
                         max="100"
                         className="crash-ton-step-input"
-                        value={autoCashout === 0 ? '' : autoCashout}
+                        value={autoCashout}
                         onChange={(e) => {
-                          const raw = e.target.value;
-                          if (raw === '') {
-                            setAutoCashout('');
-                            return;
-                          }
+                          const raw = String(e.target.value).replace(',', '.');
                           const val = parseFloat(raw);
-                          if (!isNaN(val)) setAutoCashout(Math.min(100, val));
-                        }}
-                        onBlur={() => {
-                          const val = parseFloat(autoCashout);
-                          if (isNaN(val) || val < 1.1) setAutoCashout(1.1);
-                          else setAutoCashout(parseFloat(Math.min(100, val).toFixed(2)));
+                          if (!isNaN(val)) {
+                            const bounded = Math.max(1.1, Math.min(100, val));
+                            setAutoCashout(bounded);
+                            try { localStorage.setItem('crash_auto_cashout', String(bounded)); } catch (e) {}
+                          }
                         }}
                       />
                       <span className="crash-ton-step-x">x</span>
                       <button
                         type="button"
                         className="crash-ton-step-btn"
-                        onClick={() => setAutoCashout(prev => Math.min(100, parseFloat((prev + 0.1).toFixed(2))))}
+                        onClick={() => {
+                          setAutoCashout(prev => {
+                            const next = Math.min(100, parseFloat((prev + 0.1).toFixed(2)));
+                            try { localStorage.setItem('crash_auto_cashout', String(next)); } catch (e) {}
+                            return next;
+                          });
+                        }}
                       >
                         +
                       </button>
@@ -1067,7 +1248,14 @@ export default function CrashGame({ onBack }) {
                         key={preset}
                         type="button"
                         className={`crash-ton-chip-pill ${autoCashout === preset ? 'active-chip' : ''}`}
-                        onClick={() => setAutoCashout(preset)}
+                        onClick={() => {
+                          setAutoCashout(preset);
+                          setAutoCashoutEnabled(true);
+                          try {
+                            localStorage.setItem('crash_auto_cashout', String(preset));
+                            localStorage.setItem('crash_auto_cashout_enabled', 'true');
+                          } catch (e) {}
+                        }}
                       >
                         {preset}x
                       </button>
@@ -1082,7 +1270,7 @@ export default function CrashGame({ onBack }) {
               <span className="crash-ton-balance-title">Баланс:</span>
               <span className="crash-ton-balance-val">
                 <TetherIcon size={22} />
-                <span>{balance.toFixed(2)}</span>
+                <span>{(Number(balance) || 0).toFixed(2)}</span>
               </span>
             </div>
 
@@ -1095,7 +1283,7 @@ export default function CrashGame({ onBack }) {
             >
               {balance < betAmount
                 ? 'Недостаточно средств'
-                : gameState === 'waiting'
+                : (gameState === 'waiting' && countdown >= 1.0)
                 ? `Сделать ставку (${betAmount} USDT)`
                 : `В очередь на след. раунд (${betAmount} USDT)`}
             </button>

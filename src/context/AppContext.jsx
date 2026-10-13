@@ -344,6 +344,90 @@ export function AppProvider({ children }) {
     return () => { isCancelled = true; };
   }, []);
 
+  // Multi-tab coordination: unique tab identifier to avoid echo loops
+  const tabIdRef = React.useRef('tab_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now());
+  const isApplyingExternalSync = React.useRef(false);
+
+  // Broadcast state updates to all other open tabs in real-time
+  const broadcastCrossTabState = (payload) => {
+    if (isApplyingExternalSync.current) return;
+    try {
+      const data = {
+        senderTabId: tabIdRef.current,
+        timestamp: Date.now(),
+        ...payload
+      };
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bc = new BroadcastChannel('royalx_multitab_sync');
+        bc.postMessage(data);
+        bc.close();
+      }
+      localStorage.setItem('rx_live_cross_tab_sync', JSON.stringify(data));
+    } catch (e) {}
+  };
+
+  // Listen for real-time broadcasts from other tabs (BroadcastChannel + storage event)
+  useEffect(() => {
+    const handleIncomingSync = (data) => {
+      if (!data || data.senderTabId === tabIdRef.current) return;
+      isApplyingExternalSync.current = true;
+      if (data.balance !== undefined && !isNaN(Number(data.balance))) {
+        setBalance(parseFloat(Number(data.balance).toFixed(2)));
+      }
+      if (data.cashback !== undefined && !isNaN(Number(data.cashback))) {
+        setAccumulatedCashback(parseFloat(Number(data.cashback).toFixed(2)));
+      }
+      if (data.wagerRequired !== undefined && !isNaN(Number(data.wagerRequired))) {
+        setWagerRequired(parseFloat(Number(data.wagerRequired).toFixed(2)));
+      }
+      if (data.totalTurnover !== undefined && !isNaN(Number(data.totalTurnover))) {
+        setTotalTurnover(parseFloat(Number(data.totalTurnover).toFixed(2)));
+      }
+      if (Array.isArray(data.history)) {
+        setHistoryItems(data.history);
+      }
+      setTimeout(() => {
+        isApplyingExternalSync.current = false;
+      }, 80);
+    };
+
+    let bc = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('royalx_multitab_sync');
+        bc.onmessage = (event) => {
+          if (event && event.data) handleIncomingSync(event.data);
+        };
+      } catch (e) {}
+    }
+
+    const onStorageChange = (e) => {
+      if (e.key === 'rx_live_cross_tab_sync' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          handleIncomingSync(parsed);
+        } catch (err) {}
+      }
+    };
+    window.addEventListener('storage', onStorageChange);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('storage', onStorageChange);
+    };
+  }, []);
+
+  // Broadcast state changes whenever balance, cashback, wager or turnover change
+  useEffect(() => {
+    if (!isDbLoaded) return;
+    broadcastCrossTabState({
+      balance,
+      cashback: accumulatedCashback,
+      wagerRequired,
+      totalTurnover
+    });
+  }, [balance, accumulatedCashback, wagerRequired, totalTurnover, isDbLoaded]);
+
   // Toast helper
   const showToast = (message, isError = false) => {
     setToast({ show: true, message, isError });
@@ -407,15 +491,39 @@ export function AppProvider({ children }) {
     }
   };
 
-  // Claim accumulated cashback (minimum 1 USDT)
-  const claimCashback = () => {
-    if (accumulatedCashback < 1) {
-      showToast('Минимальная сумма для вывода кэшбэка — 1.00 USDT', true);
+  // Claim accumulated cashback (ONLY on Fridays, minimum 1 USDT)
+  const claimCashback = async () => {
+    const isFriday = new Date().getDay() === 5;
+    if (!isFriday) {
+      showToast('❌ Вывод кэшбэка доступен только по пятницам!', true);
       return;
     }
-    const amt = accumulatedCashback;
-    addBalance(amt, `Кэшбэк +${amt.toFixed(2)} USDT зачислен на баланс!`);
-    syncCashback(0.00);
+
+    if (accumulatedCashback < 1) {
+      showToast('❌ Минимальная сумма для вывода кэшбэка — 1.00 USDT', true);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/user/claim-cashback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ userId: tgUser.id || APP_CONFIG.superAdminId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setBalance(data.balance);
+        setAccumulatedCashback(0.00);
+        showToast(`🎉 Кэшбэк +$${data.claimedAmount.toFixed(2)} USDT зачислен на баланс!`);
+        broadcastCrossTabState({ balance: data.balance, cashback: 0.00 });
+      } else {
+        showToast(data.error || 'Ошибка вывода кэшбэка', true);
+      }
+    } catch (e) {
+      const amt = accumulatedCashback;
+      addBalance(amt, `🎉 Кэшбэк +$${amt.toFixed(2)} USDT зачислен на баланс!`);
+      syncCashback(0.00);
+    }
   };
 
   const processedBetsRef = React.useRef(new Set());
