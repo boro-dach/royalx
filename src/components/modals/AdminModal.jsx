@@ -396,13 +396,30 @@ export default function AdminModal() {
     setPromoMinTurnover('0');
   };
 
-  const handleVerifyPin = (e) => {
+  const handleVerifyPin = async (e) => {
     e.preventDefault();
-    if (pinCode === '2026' || pinCode === '777' || pinCode === 'admin') {
-      setAdminAuthed(true);
-      showToast('✅ Доступ разрешен!');
-    } else {
-      showToast('❌ Неверный PIN-код администратора', true);
+    if (!pinCode.trim()) {
+      showToast('❌ Введите PIN-код', true);
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/verify-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({
+          adminId: currentAdminId,
+          pin: pinCode.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.authorized) {
+        setAdminAuthed(true);
+        showToast('✅ Доступ разрешен!');
+      } else {
+        showToast(data.error || '❌ Неверный PIN-код администратора', true);
+      }
+    } catch (err) {
+      showToast('❌ Ошибка проверки PIN-кода', true);
     }
   };
 
@@ -435,7 +452,7 @@ export default function AdminModal() {
             <form onSubmit={handleVerifyPin} style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '16px 0', textAlign: 'center' }}>
               <div style={{ fontSize: '15px', fontWeight: '600' }}>🔒 Введите PIN-код администратора</div>
               <div style={{ fontSize: '12px', color: '#8a8f99' }}>
-                Панель защищена. (PIN: 2026)
+                Панель управления защищена
               </div>
               <input
                 type="password"

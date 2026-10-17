@@ -9,7 +9,7 @@ export default function HistoryModal() {
   const filteredItems = historyItems.filter(item => {
     if (filter === 'all') return true;
     if (filter === 'dep') return item.type === 'dep';
-    if (filter === 'with') return item.type === 'with';
+    if (filter === 'with') return item.type === 'with' || item.type === 'with_refund';
     if (filter === 'game') return item.type === 'game';
     return true;
   });
@@ -75,12 +75,12 @@ export default function HistoryModal() {
                   <div style={{ 
                     fontWeight: '600', 
                     fontSize: '14px', 
-                    color: item.amount > 0 ? '#00e699' : '#ff4d4d',
+                    color: item.amount > 0 ? '#00e699' : (item.amount < 0 ? '#ff4d4d' : '#8a8f99'),
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '3px'
                   }}>
-                    {item.amount > 0 ? '+' : '-'}<TetherIcon size={12} />{Math.abs(item.amount).toFixed(2)}
+                    {item.amount > 0 ? '+' : (item.amount < 0 ? '-' : '')}<TetherIcon size={12} />{Math.abs(item.amount).toFixed(2)}
                   </div>
                   <div style={{ fontSize: '10px', color: '#8a8f99', marginTop: '2px' }}>{item.status}</div>
                 </div>

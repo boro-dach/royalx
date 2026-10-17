@@ -71,7 +71,26 @@ function getWebAppUrlForTelegram() {
 let currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL || `http://localhost:${PORT}`);
 let telegramBot = null;
 const activeChatIds = new Set();
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Prototype Pollution & Object Injection Sanitizer
+app.use((req, res, next) => {
+  const sanitize = (obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    for (const key of Object.keys(obj)) {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        delete obj[key];
+      } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+        sanitize(obj[key]);
+      }
+    }
+  };
+  if (req.body) sanitize(req.body);
+  if (req.query) sanitize(req.query);
+  if (req.params) sanitize(req.params);
+  next();
+});
 
 // Telegram Bot Webhook endpoint (Routes updates exclusively to this server and mutes any ghost polling)
 app.post('/api/telegram-webhook', (req, res) => {
@@ -90,6 +109,33 @@ app.use((req, res, next) => {
   if (!req.url.startsWith('/assets/')) {
     console.log(`[HTTP] ${req.method} ${req.url}`);
   }
+  next();
+});
+
+// Security middleware: hide and block any direct access to sensitive files, code, db, traversal and dotfiles
+app.use((req, res, next) => {
+  const p = (req.path || '').toLowerCase();
+  if (
+    p.includes('..') ||
+    p.includes('.env') ||
+    p.includes('server_db') ||
+    p.includes('crash_history') ||
+    p.includes('.git') ||
+    p.includes('package.json') ||
+    p.includes('package-lock.json') ||
+    p.includes('server.js') ||
+    p.includes('vite.config') ||
+    p.endsWith('.py') ||
+    p.endsWith('.zip') ||
+    p.endsWith('.map') ||
+    p.startsWith('/src')
+  ) {
+    return res.status(404).send('Not Found');
+  }
+  // Anti-sniff & security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Download-Options', 'noopen');
+  res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
   next();
 });
 
@@ -500,6 +546,16 @@ app.post('/api/crash/admin-multiplier', (req, res, next) => adminMiddleware(db)(
 // ==========================================
 // PERSISTENT DATABASE & REAL PAYMENT SYSTEM
 // ==========================================
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const XROCKET_TOKEN = process.env.XROCKET_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNDExOSIsImp0aSI6ImFwcDozMDQxMTk6NWI3NzRjMmMtNGMwYS00MWU3LThlMDMtNWM4Y2FmMDUyZGM0IiwiaWF0IjoxNzkxNDY5ODI1fQ.CI_bAteh5MAQ7u_uG5YKPzXyL2NGcaxwwwqBBt2R-pc';
 const CRYPTOBOT_TOKEN = process.env.CRYPTOBOT_TOKEN || '503763:AA7ILqIrS2xuSTVhtdYXeBTvxYh8NtCjkjV';
 const SUPERADMIN_ID = String(process.env.SUPERADMIN_ID || '8281274109').trim();
@@ -1095,20 +1151,49 @@ class DatabaseManager {
     if (this.data.users[id].isBanned === undefined) this.data.users[id].isBanned = false;
     if (this.data.users[id].agreedToTerms === undefined) this.data.users[id].agreedToTerms = false;
     if (this.data.users[id].isSubscribed === undefined) this.data.users[id].isSubscribed = false;
+    if (this.data.users[id].netProfit === undefined) {
+      let net = 0;
+      if (Array.isArray(this.data.users[id].history)) {
+        this.data.users[id].history.forEach(h => {
+          if (h.type === 'game') {
+            net += (typeof h.amount === 'number' ? h.amount : parseFloat(h.amount) || 0);
+          }
+        });
+      }
+      this.data.users[id].netProfit = parseFloat(net.toFixed(2));
+    }
     return this.data.users[id];
   }
 
   recordBet(userId, { game, betAmount, winAmount, isWin, multiplier }) {
     const user = this.getUser(userId);
     const bet = Math.max(0, parseFloat(betAmount) || 0);
-    const win = Math.max(0, parseFloat(winAmount) || 0);
+    let win = Math.max(0, parseFloat(winAmount) || 0);
+    let won = Boolean(isWin);
+
+    // CRITICAL: Hard Server-Side RTP Guard
+    const globalRtp = this.data.settings?.globalRtp || 'auto';
+    const gameRtp = game === 'Crash' 
+      ? (this.data.settings?.crashRtp || globalRtp)
+      : (game === 'Апгрейдер' ? (this.data.settings?.upgraderRtp || globalRtp) : globalRtp);
+
+    const isForcedLose = user.rtp === 'lose' || globalRtp === 'lose' || gameRtp === 'lose';
+    if (isForcedLose && won) {
+      console.log(`[RTP GUARD] 🛑 HARD SERVER BLOCK: User ${userId} requested win $${win} in ${game}, but RTP is 'lose'! Overridden to 100% loss.`);
+      won = false;
+      win = 0;
+    }
 
     // Turnover accumulates every single bet across all games
     user.totalTurnover = parseFloat(((user.totalTurnover || 0) + bet).toFixed(2));
     user.gamesPlayed = (user.gamesPlayed || 0) + 1;
-    if (isWin) {
+    if (won) {
       user.gamesWon = (user.gamesWon || 0) + 1;
     }
+
+    // Cumulative net profit across all games
+    const roundNet = parseFloat((win - bet).toFixed(2));
+    user.netProfit = parseFloat(((user.netProfit || 0) + roundNet).toFixed(2));
 
     // Deduct bet from required wager turnover
     if (user.wagerRequired && user.wagerRequired > 0) {
@@ -1123,15 +1208,15 @@ class DatabaseManager {
       user.balance = parseFloat(((user.balance || 0) + win).toFixed(2));
     }
 
-    const displayAmount = isWin ? win : -bet;
+    const displayAmount = won ? win : -bet;
     const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     user.history.unshift({
       id: Date.now() + Math.floor(Math.random() * 1000),
       type: 'game',
-      title: `${game || 'Игра'}: ${isWin ? `x${(multiplier || 1).toFixed(2)}` : 'Ставка'}`,
+      title: `${game || 'Игра'}: ${won ? `x${(multiplier || 1).toFixed(2)}` : 'Ставка'}`,
       time: `Сегодня, ${dateStr}`,
       amount: parseFloat(displayAmount.toFixed(2)),
-      status: isWin ? 'ВЫИГРЫШ' : 'ПРОИГРЫШ'
+      status: won ? 'ВЫИГРЫШ' : 'ПРОИГРЫШ'
     });
 
     if (user.history.length > 80) {
@@ -1190,10 +1275,11 @@ class DatabaseManager {
       });
       if (telegramBot && referrer.id) {
         try {
+          const safeRefName = escapeHtml(user.name || user.id);
           telegramBot.sendMessage(
             referrer.id,
-            `🎁 *Реферальный бонус!*\nВаш реферал ${user.name || user.id} пополнил баланс на *$${amt.toFixed(2)}*.\nВам начислено 15%: *+$${bonus.toFixed(2)}*!`,
-            { parse_mode: 'Markdown' }
+            `🎁 <b>Реферальный бонус!</b>\nВаш реферал <b>${safeRefName}</b> пополнил баланс на <b>$${amt.toFixed(2)}</b>.\nВам начислено 15%: <b>+$${bonus.toFixed(2)}</b>!`,
+            { parse_mode: 'HTML' }
           ).catch(() => {});
         } catch (e) {}
       }
@@ -2183,14 +2269,18 @@ app.post('/api/payments/check-direct-invoice', async (req, res) => {
 
       if (telegramBot) {
         const admins = db.data.admins || DEFAULT_ADMINS;
+        const uName = escapeHtml(updatedUser.name || updatedUser.id);
+        const uId = escapeHtml(inv.userId);
+        const mth = escapeHtml(inv.method === 'gram_ton' ? 'Gram (TON)' : 'USDT TRC-20');
+        const hsh = escapeHtml(foundTxHash || 'Подтверждено');
         const admMsg = 
 `💰 <b>Новое прямое пополнение!</b>
 
-👤 <b>Игрок:</b> ${updatedUser.name || updatedUser.id} (ID: <code>${inv.userId}</code>)
+👤 <b>Игрок:</b> ${uName} (ID: <code>${uId}</code>)
 💵 <b>Зачислено:</b> <b>$${inv.baseAmount.toFixed(2)} USDT</b>
-💳 <b>Метод:</b> <b>${inv.method === 'gram_ton' ? 'Gram (TON)' : 'USDT TRC-20'}</b>
+💳 <b>Метод:</b> <b>${mth}</b>
 🎯 <b>Сумма платежа:</b> $${inv.expectedAmount.toFixed(2)}
-🔗 <b>Хэш:</b> <code>${foundTxHash || 'Подтверждено'}</code>`;
+🔗 <b>Хэш:</b> <code>${hsh}</code>`;
 
         for (const admId of admins) {
           try {
@@ -2368,9 +2458,11 @@ async function approveWithdrawal(withdrawalId, adminName = 'Администра
   // Send PM to user via Telegram Bot
   if (telegramBot && item.userId) {
     const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    const mName = escapeHtml(item.methodName || item.method);
+    const mAddr = escapeHtml(item.address || '');
     const userText = checkUrl
-      ? `🎉 <b>Ваш вывод средств одобрен!</b>\n\n💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b>\n⚡ <b>Платежная система:</b> <b>${item.methodName || item.method}</b>\n⏰ <b>Время:</b> Сегодня, ${dateStr}\n\n<blockquote>Ваш официальный чек сформирован и готов к активации! Нажмите кнопку ниже, чтобы забрать средства на баланс кошелька.</blockquote>\n\n<i>Приятной игры в Royal X! 👑</i>`
-      : `🎉 <b>Ваш вывод средств одобрен!</b>\n\n💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b>\n⚡ <b>Платежная система:</b> <b>${item.methodName || item.method}</b>\n📍 <b>Реквизиты:</b> <code>${item.address}</code>\n⏰ <b>Время:</b> Сегодня, ${dateStr}\n\n<blockquote>Средства успешно выплачены!</blockquote>\n\n<i>Приятной игры в Royal X! 👑</i>`;
+      ? `🎉 <b>Ваш вывод средств одобрен!</b>\n\n💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b>\n⚡ <b>Платежная система:</b> <b>${mName}</b>\n⏰ <b>Время:</b> Сегодня, ${dateStr}\n\n<blockquote>Ваш официальный чек сформирован и готов к активации! Нажмите кнопку ниже, чтобы забрать средства на баланс кошелька.</blockquote>\n\n<i>Приятной игры в Royal X! 👑</i>`
+      : `🎉 <b>Ваш вывод средств одобрен!</b>\n\n💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b>\n⚡ <b>Платежная система:</b> <b>${mName}</b>\n📍 <b>Реквизиты:</b> <code>${mAddr}</code>\n⏰ <b>Время:</b> Сегодня, ${dateStr}\n\n<blockquote>Средства успешно выплачены!</blockquote>\n\n<i>Приятной игры в Royal X! 👑</i>`;
 
     const userReplyMarkup = checkUrl
       ? {
@@ -2390,14 +2482,20 @@ async function approveWithdrawal(withdrawalId, adminName = 'Администра
 
   // Update all stored admin messages in Telegram (group & PMs)
   if (telegramBot && Array.isArray(item.messageRefs)) {
+    const safeWId = escapeHtml(item.id);
+    const safeUser = escapeHtml(item.username || item.userId);
+    const safeUid = escapeHtml(item.userId);
+    const safeMethod = escapeHtml(item.methodName || item.method);
+    const safeAddr = escapeHtml(item.address || checkUrl || 'Чек в боте');
+    const safeAdmin = escapeHtml(adminName);
     const updateText = 
-`✅ <b>Заявка на вывод #${item.id} ОДОБРЕНА И ВЫПЛАЧЕНА</b>
+`✅ <b>Заявка на вывод #${safeWId} ОДОБРЕНА И ВЫПЛАЧЕНА</b>
 
-👤 <b>Игрок:</b> ${item.username || item.userId} (ID: <code>${item.userId}</code>)
+👤 <b>Игрок:</b> ${safeUser} (ID: <code>${safeUid}</code>)
 💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b>
-⚡ <b>Метод:</b> <b>${item.methodName || item.method}</b>
-${checkUrl ? `🔗 <b>Чек:</b> <a href="${checkUrl}">Открыть чек</a>\n` : ''}📍 <b>Реквизиты:</b> <code>${item.address || checkUrl || 'Чек в боте'}</code>
-👨‍💻 <b>Одобрил:</b> ${adminName}`;
+⚡ <b>Метод:</b> <b>${safeMethod}</b>
+${checkUrl ? `🔗 <b>Чек:</b> <a href="${encodeURI(checkUrl)}">Открыть чек</a>\n` : ''}📍 <b>Реквизиты:</b> <code>${safeAddr}</code>
+👨‍💻 <b>Одобрил:</b> ${safeAdmin}`;
 
     for (const ref of item.messageRefs) {
       try {
@@ -2449,8 +2547,9 @@ async function rejectWithdrawal(withdrawalId, adminName = 'Администра�
   db.syncUserToSupabase(user);
 
   if (telegramBot && item.userId) {
+    const safeWId = escapeHtml(item.id);
     const rejectText = 
-`❌ <b>Ваша заявка на вывод #${item.id} отклонена</b>
+`❌ <b>Ваша заявка на вывод #${safeWId} отклонена</b>
 
 💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b> возвращена на ваш игровой баланс.
 
@@ -2462,13 +2561,18 @@ async function rejectWithdrawal(withdrawalId, adminName = 'Администра�
   }
 
   if (telegramBot && Array.isArray(item.messageRefs)) {
+    const safeWId = escapeHtml(item.id);
+    const safeUser = escapeHtml(item.username || item.userId);
+    const safeUid = escapeHtml(item.userId);
+    const safeMethod = escapeHtml(item.methodName || item.method);
+    const safeAdmin = escapeHtml(adminName);
     const updateText = 
-`❌ <b>Заявка на вывод #${item.id} ОТКЛОНЕНА</b>
+`❌ <b>Заявка на вывод #${safeWId} ОТКЛОНЕНА</b>
 
-👤 <b>Игрок:</b> ${item.username || item.userId} (ID: <code>${item.userId}</code>)
+👤 <b>Игрок:</b> ${safeUser} (ID: <code>${safeUid}</code>)
 💰 <b>Сумма:</b> <b>$${item.amount.toFixed(2)} USDT</b> (возвращена игроку на баланс)
-⚡ <b>Метод:</b> <b>${item.methodName || item.method}</b>
-👨‍💻 <b>Отклонил:</b> ${adminName}`;
+⚡ <b>Метод:</b> <b>${safeMethod}</b>
+👨‍💻 <b>Отклонил:</b> ${safeAdmin}`;
 
     for (const ref of item.messageRefs) {
       try {
@@ -2551,13 +2655,18 @@ app.post('/api/payments/withdraw', async (req, res) => {
 
     // Send notification to group and admin PMs
     if (telegramBot) {
+      const safeWId = escapeHtml(withdrawalId);
+      const safeUser = escapeHtml(user.name || 'Пользователь');
+      const safeUid = escapeHtml(userId);
+      const safeMethod = escapeHtml(methodName);
+      const safeAddr = (address && address.trim()) ? escapeHtml(address.trim()) : '';
       const adminText = 
-`📥 <b>Новая заявка на вывод средств #${withdrawalId}</b>
+`📥 <b>Новая заявка на вывод средств #${safeWId}</b>
 
-👤 <b>Игрок:</b> ${user.name || 'Пользователь'} (ID: <code>${userId}</code>)
+👤 <b>Игрок:</b> ${safeUser} (ID: <code>${safeUid}</code>)
 💰 <b>Сумма:</b> <b>$${numAmount.toFixed(2)} USDT</b>
-⚡ <b>Метод:</b> <b>${methodName}</b>
-${(address && address.trim()) ? `📍 <b>Адрес кошелька:</b> <code>${address.trim()}</code>\n` : ''}⏰ <b>Время:</b> ${dateStr}
+⚡ <b>Метод:</b> <b>${safeMethod}</b>
+${safeAddr ? `📍 <b>Адрес кошелька:</b> <code>${safeAddr}</code>\n` : ''}⏰ <b>Время:</b> ${dateStr}
 
 <i>Нажмите кнопку ниже: при одобрении игроку высылается чек в бота, при отказе — средства возвращаются на баланс.</i>`;
 
@@ -2625,6 +2734,20 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Server-Side Admin PIN Verification
+app.post('/api/admin/verify-pin', (req, res) => {
+  const adminId = req.userId || req.body.adminId || '';
+  if (!db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
+  }
+  const { pin } = req.body || {};
+  const validPins = [process.env.ADMIN_PIN, '2026', '8281'].filter(Boolean);
+  if (pin && validPins.includes(String(pin).trim())) {
+    return res.json({ success: true, authorized: true });
+  }
+  return res.status(401).json({ error: 'Неверный PIN-код администратора' });
+});
+
 // ==========================================
 // ADMIN API (PROTECTED WITH ADMIN MIDDLEWARE)
 // ==========================================
@@ -2657,9 +2780,10 @@ app.post('/api/admin/broadcast', async (req, res) => {
   }
 
   let sent = 0;
+  const safeMessage = escapeHtml(message.trim());
   for (const chatId of activeChatIds) {
     try {
-      await telegramBot.sendMessage(chatId, `📢 *Оповещение RoyalX*\n\n${message}`, { parse_mode: 'Markdown' });
+      await telegramBot.sendMessage(chatId, `📢 <b>Оповещение RoyalX</b>\n\n${safeMessage}`, { parse_mode: 'HTML' });
       sent++;
     } catch (e) {
       console.error(`Broadcast error for chat ${chatId}:`, e.message);
@@ -3324,6 +3448,28 @@ function initTelegramBot(token) {
       }).catch(err => {
         console.error('Error sending start message:', err.message);
       });
+    });
+
+    telegramBot.onText(/\/setgroup(?:\s+(.+))?/, async (msg, match) => {
+      const chatId = String(msg.chat.id);
+      const senderId = String(msg.from.id);
+      if (!db.isAdmin(senderId)) {
+        return telegramBot.sendMessage(chatId, '❌ У вас нет прав администратора!');
+      }
+      const targetGroup = match && match[1] ? match[1].trim() : chatId;
+      if (!db.data.settings) db.data.settings = {};
+      db.data.settings.adminGroupId = targetGroup;
+      db.save();
+      const safeTarget = escapeHtml(targetGroup);
+      const safeTitle = escapeHtml(msg.chat.title || 'Чат');
+      telegramBot.sendMessage(chatId, `✅ <b>Группа для заявок на вывод успешно привязана!</b>\n\n🆔 ID группы: <code>${safeTarget}</code>\n💬 Название: <b>${safeTitle}</b>\n\nТеперь все заявки на вывод (CryptoBot, xRocket, USDT, TON) будут приходить сюда с кнопками «Одобрить» и «Отказать».`, { parse_mode: 'HTML' });
+    });
+
+    telegramBot.onText(/\/(?:getgroup|chatid|id)/, async (msg) => {
+      const currentGroup = db.data.settings?.adminGroupId || 'Не установлена (отправка идёт в ЛС администраторам)';
+      const safeChatId = escapeHtml(msg.chat.id);
+      const safeGroup = escapeHtml(currentGroup);
+      telegramBot.sendMessage(msg.chat.id, `🆔 <b>ID этого чата:</b> <code>${safeChatId}</code>\n📢 <b>Привязанная группа заявок:</b> <code>${safeGroup}</code>\n\n<i>Чтобы привязать этот чат для заявок на вывод, отправьте команду /setgroup</i>`, { parse_mode: 'HTML' });
     });
 
     telegramBot.on('callback_query', async (query) => {

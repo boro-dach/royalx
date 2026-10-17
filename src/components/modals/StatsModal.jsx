@@ -3,14 +3,42 @@ import { useApp } from '../../context/AppContext';
 import { CloseIcon, TetherIcon } from '../common/Icons';
 
 export default function StatsModal() {
-  const { closeModal, isClosingModal, balance, userStats } = useApp();
+  const { closeModal, isClosingModal, balance, userStats, historyItems } = useApp();
 
   const totalDeposits = userStats?.totalDeposits || 0.00;
   const totalWithdrawals = userStats?.totalWithdrawals || 0.00;
   const gamesPlayed = userStats?.gamesPlayed || 0;
   const gamesWon = userStats?.gamesWon || 0;
   const winRate = gamesPlayed > 0 ? ((gamesWon / gamesPlayed) * 100).toFixed(1) : '0.0';
-  const netProfit = (balance + totalWithdrawals) - totalDeposits;
+
+  // Calculate true net profit across the player's full game history
+  // E.g. was -1000, raised 10000 -> net profit is +9000
+  const netProfit = (() => {
+    // 1. If userStats has tracked netProfit
+    if (typeof userStats?.netProfit === 'number' && !isNaN(userStats.netProfit) && gamesPlayed > 0) {
+      return userStats.netProfit;
+    }
+
+    // 2. Compute by summing all game history items
+    if (Array.isArray(historyItems) && historyItems.length > 0) {
+      const gameEntries = historyItems.filter(h => h.type === 'game');
+      if (gameEntries.length > 0) {
+        const sum = gameEntries.reduce((acc, h) => {
+          const amt = typeof h.amount === 'number' ? h.amount : parseFloat(h.amount) || 0;
+          return acc + amt;
+        }, 0);
+        return parseFloat(sum.toFixed(2));
+      }
+    }
+
+    // 3. Fallback only if real deposits were recorded
+    if (totalDeposits > 0) {
+      return parseFloat(((balance + totalWithdrawals) - totalDeposits).toFixed(2));
+    }
+
+    // 4. Default: If no games or deposits yet, net profit is 0.00 (NOT balance!)
+    return 0.00;
+  })();
 
   return (
     <div className={`modal-overlay ${isClosingModal ? 'closing' : ''}`} onClick={closeModal}>

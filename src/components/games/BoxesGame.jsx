@@ -467,7 +467,6 @@ export default function BoxesGame({ onBack }) {
     const currentBalance = balance;
     const balanceAfterBet = parseFloat((currentBalance - totalBet).toFixed(2));
     syncBalance(balanceAfterBet);
-    processBetForCashback(totalBet);
     processBetForPass(totalBet);
     try { bjAudio.playChip(); } catch (e) {}
 
@@ -551,6 +550,11 @@ export default function BoxesGame({ onBack }) {
       isWin: isProfit,
       multiplier: mult
     });
+
+    if (totalWon < totalBet) {
+      const netLoss = parseFloat((totalBet - totalWon).toFixed(2));
+      processBetForCashback(netLoss);
+    }
 
     if (isProfit) {
       try { bjAudio.playWin(); } catch (e) {}

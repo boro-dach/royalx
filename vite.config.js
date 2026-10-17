@@ -16,6 +16,17 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    sourcemap: false, // Prevents creating .map files, completely hiding original source files from browser inspection
+    minify: true,
+    cssMinify: true,
+    chunkSizeWarningLimit: 2500,
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[hash].js',
+        chunkFileNames: 'assets/[hash].js',
+        assetFileNames: 'assets/[hash].[ext]'
+      }
+    }
   }
 });

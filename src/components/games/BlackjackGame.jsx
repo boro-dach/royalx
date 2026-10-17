@@ -616,9 +616,11 @@ export default function BlackjackGame({ onBack }) {
         multiplier: 0
       });
       setRoundResult({
-        type: 'dealer-won',
-        title: 'ДИЛЕР ВЫИГРАЛ',
-        sub: `Перебор (${score})`
+        isWin: false,
+        type: 'loss',
+        title: 'Проигрыш',
+        amount: doubledBet,
+        mult: `Перебор (${score})`
       });
       processBetForCashback(doubledBet);
       setGameState('idle');

@@ -5,15 +5,23 @@ import { CloseIcon } from '../common/Icons';
 export default function PromocodeModal() {
   const { closeModal, isClosingModal, redeemPromocode, showToast, depositBonusPercent } = useApp();
   const [code, setCode] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleRedeem = () => {
-    if (!code.trim()) {
-      showToast('Введите промокод!', true);
+  const handleRedeem = async () => {
+    if (!code.trim() || isSubmitting) {
+      if (!code.trim()) showToast('Введите промокод!', true);
       return;
     }
-    redeemPromocode(code);
-    setCode('');
-    closeModal();
+    setIsSubmitting(true);
+    try {
+      const ok = await redeemPromocode(code);
+      if (ok) {
+        setCode('');
+        closeModal();
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -78,9 +86,15 @@ export default function PromocodeModal() {
                 placeholder="Например: ROYAL100"
                 value={code} 
                 onChange={e => setCode(e.target.value)}
+                disabled={isSubmitting}
               />
-              <button className="promo-submit-btn" onClick={handleRedeem}>
-                Активировать
+              <button 
+                className="promo-submit-btn" 
+                onClick={handleRedeem}
+                disabled={isSubmitting}
+                style={{ opacity: isSubmitting ? 0.7 : 1 }}
+              >
+                {isSubmitting ? 'Проверка...' : 'Активировать'}
               </button>
             </div>
           </div>

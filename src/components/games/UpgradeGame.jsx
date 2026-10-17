@@ -201,7 +201,6 @@ export default function UpgradeGame({ onBack }) {
     // 1. Deduct bet from balance and record for turnover/cashback
     const newBal = parseFloat((balance - betAmount).toFixed(2));
     syncBalance(newBal);
-    processBetForCashback(betAmount);
     processBetForPass(betAmount);
     try { bjAudio.playChip(); } catch (e) {}
 
@@ -340,6 +339,7 @@ export default function UpgradeGame({ onBack }) {
           isWin: false,
           multiplier: 0
         });
+        processBetForCashback(betAmount);
 
         try { bjAudio.playLose(); } catch (e) {}
       }

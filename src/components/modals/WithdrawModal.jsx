@@ -28,6 +28,11 @@ export default function WithdrawModal() {
       return;
     }
 
+    if (String(currentUserId).startsWith('guest_') && (paymentMethod === 'cryptobot' || paymentMethod === 'xrocket')) {
+      showToast('❌ Для получения чека в боте откройте приложение через Telegram!', true);
+      return;
+    }
+
     if ((paymentMethod === 'usdt_trc20' || paymentMethod === 'gram_ton') && (!walletAddress.trim() || walletAddress.trim().length < 8)) {
       showToast('❌ Укажите корректный адрес кошелька для выплаты!', true);
       return;

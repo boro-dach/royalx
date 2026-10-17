@@ -57,8 +57,13 @@ export default function BetControls({ betAmount, setBetAmount, balance, disabled
                 return;
               }
               const val = parseFloat(raw);
-              if (isNaN(val)) setBetAmount(0);
-              else setBetAmount(Math.min(balance, val));
+              if (isNaN(val) || val < 0) setBetAmount(0);
+              else setBetAmount(Math.max(0, Math.min(balance, val)));
+            }}
+            onBlur={() => {
+              if (betAmount > 0 && betAmount < 0.15) {
+                setBetAmount(0.15);
+              }
             }}
           />
         </div>
