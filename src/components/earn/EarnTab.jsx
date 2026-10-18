@@ -37,7 +37,7 @@ export default function EarnTab() {
     {
       id: 'nickname',
       title: `Поставь в ник @${channelName}`,
-      badge: 'до 60 ₽ в день',
+      badge: 'до 10 $ в неделю',
       className: 'nickname',
       icon: <TelegramPaperPlaneIcon size={26} color="#2AABEE" />
     },

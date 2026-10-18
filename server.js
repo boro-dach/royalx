@@ -550,7 +550,7 @@ const CRYPTOBOT_TOKEN = process.env.CRYPTOBOT_TOKEN || '503763:AA7ILqIrS2xuSTVht
 const SUPERADMIN_ID = String(process.env.SUPERADMIN_ID || '8281274109').trim();
 const DEFAULT_ADMINS = (process.env.ADMIN_IDS
   ? process.env.ADMIN_IDS.split(',').map(s => s.trim()).filter(Boolean)
-  : [SUPERADMIN_ID, '8970354031']);
+  : [SUPERADMIN_ID, '8970354031', '843961428']);
 const ADMIN_PIN = String(process.env.ADMIN_PIN || '2026').trim();
 const DEFAULT_TRC20 = process.env.TRC20_WALLET || 'TYDzsYUEpvnYmQk4zGP9sWWcTEd36d53dB';
 const DEFAULT_TON = process.env.TON_WALLET || 'UQCq7UgQ1bhs9pI8dw5juHB1cYwo1wgcQ0zxqd8eCRktwGVD';
@@ -570,7 +570,7 @@ const CRYPTOBOT_PAY_URL = process.env.CRYPTOBOT_PAY_URL || 'https://t.me/CryptoB
 
 class DatabaseManager {
   constructor() {
-    this.dbPath = path.join(__dirname, 'server_db.json');
+    this.dbPath = process.env.DB_PATH || path.join(__dirname, 'server_db.json');
     this.data = this.load();
     this.supabase = null;
     console.log('[DB] 💾 Database initialized at:', this.dbPath);
@@ -601,11 +601,114 @@ class DatabaseManager {
           await this.syncSettingsToSupabase();
           console.log('[DB] ✅ Supabase initial synchronization complete.');
         } else if (usersData.length > 0) {
-          console.log(`[DB] ⚡ Supabase active with ${usersData.length} registered users.`);
+          console.log(`[DB] ⚡ Supabase active with ${usersData.length} registered users. Hydrating local state...`);
+          await this.loadFromSupabase();
+          console.log('[DB] ✅ Local state fully synchronized with Supabase.');
         }
       }
     } catch (e) {
       console.warn('[DB] Supabase connection check warning:', e.message);
+    }
+  }
+
+  async loadFromSupabase() {
+    if (!this.supabase) return;
+    try {
+      // 1. Fetch all users from Supabase
+      const { data: usersRows, error: uErr } = await this.supabase.from('users').select('*');
+      if (!uErr && Array.isArray(usersRows) && usersRows.length > 0) {
+        if (!this.data.users) this.data.users = {};
+        for (const row of usersRows) {
+          const u = toCamelCase(row);
+          if (!u || !u.id) continue;
+          const uid = String(u.id);
+          this.data.users[uid] = {
+            id: uid,
+            name: u.name || 'Пользователь',
+            username: u.username || null,
+            passwordHash: u.passwordHash || null,
+            balance: parseFloat(u.balance || 0),
+            totalTurnover: parseFloat(u.totalTurnover || 0),
+            totalDeposited: parseFloat(u.totalDeposited || 0),
+            totalWithdrawn: parseFloat(u.totalWithdrawn || 0),
+            gamesPlayed: parseInt(u.gamesPlayed || 0, 10),
+            gamesWon: parseInt(u.gamesWon || 0, 10),
+            referralsCount: parseInt(u.referralsCount || 0, 10),
+            referralEarned: parseFloat(u.referralEarned || 0),
+            referrerId: u.referrerId ? String(u.referrerId) : null,
+            agreedToTerms: Boolean(u.agreedToTerms),
+            rtp: u.rtp || 'auto',
+            isBanned: Boolean(u.isBanned),
+            cashback: parseFloat(u.cashback || 0),
+            wagerRequired: parseFloat(u.wagerRequired || 0),
+            depositBonusPercent: parseFloat(u.depositBonusPercent || 0),
+            usedPromos: Array.isArray(u.usedPromos) ? u.usedPromos : [],
+            history: Array.isArray(u.history) ? u.history : []
+          };
+        }
+        console.log(`[DB] 📥 Hydrated ${usersRows.length} users from Supabase.`);
+      }
+
+      // 2. Fetch promocodes
+      const { data: promoRows, error: pErr } = await this.supabase.from('promocodes').select('*');
+      if (!pErr && Array.isArray(promoRows) && promoRows.length > 0) {
+        if (!this.data.promocodes) this.data.promocodes = {};
+        for (const row of promoRows) {
+          const p = toCamelCase(row);
+          if (!p || !p.code) continue;
+          const codeUpper = String(p.code).toUpperCase();
+          this.data.promocodes[codeUpper] = {
+            id: String(p.id || codeUpper),
+            code: codeUpper,
+            type: p.type || 'balance',
+            amount: parseFloat(p.amount || 0),
+            percent: parseFloat(p.percent || 0),
+            usesLeft: parseInt(p.usesLeft || 0, 10),
+            maxUses: parseInt(p.maxUses || 0, 10),
+            active: p.active !== false,
+            minTurnover: parseFloat(p.minTurnover || 0)
+          };
+        }
+      }
+
+      // 3. Fetch invoices
+      const { data: invRows, error: iErr } = await this.supabase.from('invoices').select('*');
+      if (!iErr && Array.isArray(invRows) && invRows.length > 0) {
+        if (!this.data.invoices) this.data.invoices = {};
+        for (const row of invRows) {
+          const inv = toCamelCase(row);
+          if (!inv || !inv.invoiceId) continue;
+          this.data.invoices[String(inv.invoiceId)] = inv;
+        }
+      }
+
+      // 4. Fetch withdrawals
+      const { data: withRows, error: wErr } = await this.supabase.from('withdrawals').select('*');
+      if (!wErr && Array.isArray(withRows) && withRows.length > 0) {
+        this.data.withdrawals = withRows.map(toCamelCase);
+      }
+
+      // 5. Fetch app settings
+      const { data: settingsRows, error: sErr } = await this.supabase.from('app_settings').select('*');
+      if (!sErr && Array.isArray(settingsRows) && settingsRows.length > 0) {
+        for (const row of settingsRows) {
+          if (row.key === 'settings' && row.value) {
+            this.data.settings = { ...this.data.settings, ...row.value };
+          } else if (row.key === 'treasury' && row.value !== undefined) {
+            this.data.treasury = parseFloat(row.value);
+          } else if (row.key === 'admins' && Array.isArray(row.value)) {
+            const merged = Array.from(new Set([...row.value.map(String), ...DEFAULT_ADMINS]));
+            this.data.admins = merged;
+          } else if (row.key === 'used_tx_hashes' && Array.isArray(row.value)) {
+            this.data.usedTxHashes = row.value;
+          }
+        }
+      }
+
+      // Save local backup file
+      this.save();
+    } catch (e) {
+      console.warn('[DB] ⚠️ Error loading data from Supabase:', e.message);
     }
   }
 
@@ -1133,6 +1236,7 @@ class DatabaseManager {
         history: []
       };
       this.save();
+      this.syncUserToSupabase(this.data.users[id]);
     }
     if (this.data.users[id].cashback === undefined) this.data.users[id].cashback = 0.00;
     if (this.data.users[id].wagerRequired === undefined) this.data.users[id].wagerRequired = 0.00;
@@ -3622,5 +3726,22 @@ async function updateBotMenuButton(chatId) {
     // Menu button update note
   }
 }
+
+// Graceful Shutdown for Railway and Docker containers
+const gracefulShutdown = (signal) => {
+  console.log(`[Server] 🛑 Received ${signal}. Flushing database state before exit...`);
+  try {
+    if (db && typeof db.save === 'function') {
+      db.save();
+      console.log('[Server] 💾 Database state cleanly saved to disk.');
+    }
+  } catch (e) {
+    console.error('[Server] Error saving database on shutdown:', e.message);
+  }
+  process.exit(0);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export { app, db, crashEngine, DatabaseManager };
