@@ -229,8 +229,59 @@ async function runApiTests() {
   assert.strictEqual(crashBetRes.status, 200);
   console.log('  ✅ [PASS] POST /api/crash/bet handled bet registration');
 
+  // Test 17: Burp Suite attack simulation: Regular user spoofing ?adminId=8281274109 on admin route
+  const reLogin = await request(app, 'POST', '/api/auth/login', {
+    headers: { 'Content-Type': 'application/json' },
+    body: { username: uniqueUsername, password: 'StrongPassword123' }
+  });
+  const normalToken = reLogin.body.token;
+
+  const burpAdminSpoof = await request(app, 'GET', '/api/admin/db/overview?adminId=8281274109', {
+    headers: { 'Authorization': `Bearer ${normalToken}` }
+  });
+  assert.strictEqual(burpAdminSpoof.status, 403);
+  console.log('  ✅ [PASS] Security: Burp spoofing ?adminId=8281274109 rejected with 403 FORBIDDEN');
+
+  // Test 18: Burp Suite attack simulation: Normal user trying to verify admin PIN
+  const burpPinAttempt = await request(app, 'POST', '/api/admin/verify-pin', {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${normalToken}`
+    },
+    body: { pin: '2026' }
+  });
+  assert.strictEqual(burpPinAttempt.status, 403);
+  console.log('  ✅ [PASS] Security: Non-admin PIN verification attempt rejected with 403 FORBIDDEN');
+
+  // Test 19: Verified Admin PIN verification with correct PIN
+  const adminPinVerify = await request(app, 'POST', '/api/admin/verify-pin', {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${adminToken}`
+    },
+    body: { pin: '2026' }
+  });
+  assert.strictEqual(adminPinVerify.status, 200);
+  assert.strictEqual(adminPinVerify.body.success, true);
+  console.log('  ✅ [PASS] Security: Admin PIN verified successfully on server');
+
+  // Test 20: Burp Suite attack simulation: Normal user trying to withdraw from another user account
+  const burpWithdrawSpoof = await request(app, 'POST', '/api/payments/withdraw', {
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${normalToken}`
+    },
+    body: {
+      userId: '8281274109', // Attacker targets superadmin balance
+      method: 'cryptobot',
+      amount: 10
+    }
+  });
+  assert.strictEqual(burpWithdrawSpoof.status, 403);
+  console.log('  ✅ [PASS] Security: Cross-user withdrawal attempt rejected with 403 FORBIDDEN');
+
   console.log('====================================================');
-  console.log('🎉 ALL 16 EXPRESS SERVER API TESTS PASSED!');
+  console.log('🎉 ALL 20 EXPRESS SERVER API & SECURITY TESTS PASSED!');
   console.log('====================================================');
 
   process.exit(0);

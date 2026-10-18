@@ -76,7 +76,7 @@ export default function AdminModal() {
     referralEarned: ''
   });
 
-  const currentAdminId = tgUser?.id || APP_CONFIG.superAdminId;
+  const currentAdminId = tgUser?.id || '';
   const { current: currentRank } = getCurrentRankInfo();
 
   // Load database overview and users
@@ -396,30 +396,29 @@ export default function AdminModal() {
     setPromoMinTurnover('0');
   };
 
+  const [isVerifyingPin, setIsVerifyingPin] = useState(false);
+
   const handleVerifyPin = async (e) => {
     e.preventDefault();
-    if (!pinCode.trim()) {
-      showToast('❌ Введите PIN-код', true);
-      return;
-    }
+    if (!pinCode.trim() || isVerifyingPin) return;
+    setIsVerifyingPin(true);
     try {
       const res = await fetch('/api/admin/verify-pin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({
-          adminId: currentAdminId,
-          pin: pinCode.trim()
-        })
+        body: JSON.stringify({ pin: pinCode.trim() })
       });
       const data = await res.json();
-      if (res.ok && data.authorized) {
+      if (res.ok && (data.authorized || data.success)) {
         setAdminAuthed(true);
         showToast('✅ Доступ разрешен!');
       } else {
         showToast(data.error || '❌ Неверный PIN-код администратора', true);
       }
     } catch (err) {
-      showToast('❌ Ошибка проверки PIN-кода', true);
+      showToast('❌ Ошибка проверки PIN-кода на сервере', true);
+    } finally {
+      setIsVerifyingPin(false);
     }
   };
 
@@ -463,8 +462,8 @@ export default function AdminModal() {
                 onChange={e => setPinCode(e.target.value)}
                 autoFocus
               />
-              <button type="submit" className="banner-btn" style={{ width: '100%', padding: '12px' }}>
-                Войти в админку
+              <button type="submit" className="banner-btn" style={{ width: '100%', padding: '12px' }} disabled={isVerifyingPin}>
+                {isVerifyingPin ? 'Проверка...' : 'Войти в админку'}
               </button>
             </form>
           ) : (

@@ -203,10 +203,10 @@ export function authMiddleware(
       }
     }
 
-    // 3. Dev auth bypass outside production if enabled
+    // 3. Dev auth bypass strictly for automated test suites
     if (
       allowDevAuth &&
-      process.env.NODE_ENV !== 'production' &&
+      process.env.NODE_ENV === 'test' &&
       (req.query.devUserId || process.env.DEV_AUTH_USER_ID)
     ) {
       const devId = String(req.query.devUserId || process.env.DEV_AUTH_USER_ID);
@@ -237,7 +237,7 @@ export function adminMiddleware(db) {
     if (req.path === '/check' || req.path === '/api/admin/check') {
       return next();
     }
-    const adminId = req.userId || req.query.adminId || req.body.adminId || req.body.adminUserId;
+    const adminId = req.userId;
     if (!adminId || !db.isAdmin(adminId)) {
       console.warn(`[Security] ⛔ Unauthorized admin access attempt from: ${adminId || 'anonymous'}`);
       return res.status(403).json({

@@ -532,17 +532,6 @@ app.get('/api/crash/stream', (req, res) => {
   });
 });
 
-app.post('/api/crash/admin-multiplier', (req, res, next) => adminMiddleware(db)(req, res, next), (req, res) => {
-  const { multiplier } = req.body;
-  if (multiplier && !isNaN(parseFloat(multiplier))) {
-    crashEngine.customNextMult = parseFloat(multiplier);
-    console.log(`[Crash 24/7] 🛠️ Admin queued next multiplier: x${crashEngine.customNextMult}`);
-    return res.json({ success: true, nextMult: crashEngine.customNextMult });
-  }
-  crashEngine.customNextMult = null;
-  res.json({ success: true, nextMult: null });
-});
-
 // ==========================================
 // PERSISTENT DATABASE & REAL PAYMENT SYSTEM
 // ==========================================
@@ -562,6 +551,7 @@ const SUPERADMIN_ID = String(process.env.SUPERADMIN_ID || '8281274109').trim();
 const DEFAULT_ADMINS = (process.env.ADMIN_IDS
   ? process.env.ADMIN_IDS.split(',').map(s => s.trim()).filter(Boolean)
   : [SUPERADMIN_ID, '8970354031']);
+const ADMIN_PIN = String(process.env.ADMIN_PIN || '2026').trim();
 const DEFAULT_TRC20 = process.env.TRC20_WALLET || 'TYDzsYUEpvnYmQk4zGP9sWWcTEd36d53dB';
 const DEFAULT_TON = process.env.TON_WALLET || 'UQCq7UgQ1bhs9pI8dw5juHB1cYwo1wgcQ0zxqd8eCRktwGVD';
 const SUPPORT_USERNAME = process.env.SUPPORT_USERNAME || 'MartinCartier';
@@ -1352,10 +1342,10 @@ app.use(authMiddleware(db, {
     '/api/auth/telegram',
     '/api/auth/register',
     '/api/auth/login',
-    '/api/auth/dev-login',
     '/api/admin/check',
     '/api/subscription/check',
-    '/api/subscription/status'
+    '/api/subscription/status',
+    ...(process.env.NODE_ENV === 'test' ? ['/api/auth/dev-login'] : [])
   ],
   publicPrefixes: [
     '/assets',
@@ -1471,8 +1461,11 @@ app.post('/api/auth/login', async (req, res) => {
   });
 });
 
-// Dev / Testing Quick Login
+// Dev / Testing Quick Login - strictly disabled in production
 app.post('/api/auth/dev-login', async (req, res) => {
+  if (process.env.NODE_ENV !== 'test') {
+    return res.status(404).json({ error: 'Not found' });
+  }
   const targetId = String(req.body.userId || SUPERADMIN_ID);
   const user = db.getUser(targetId, 'Dev User');
   const session = await createSession(db, user.id, req.headers['user-agent']);
@@ -1521,9 +1514,9 @@ app.get('/api/user/profile', (req, res) => {
 });
 
 app.post('/api/user/sync', (req, res) => {
-  const userId = req.userId || req.body.userId;
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ error: 'Требуется авторизация' });
   const patch = req.body.patch || req.body;
-  if (!userId) return res.status(400).json({ error: 'userId is required' });
   const user = db.getUser(userId);
   if (patch && typeof patch === 'object') {
     if (patch.balance !== undefined) user.balance = parseFloat(patch.balance);
@@ -1542,8 +1535,8 @@ app.post('/api/user/sync', (req, res) => {
 });
 
 app.post('/api/user/agree-terms', (req, res) => {
-  const userId = req.userId || req.body.userId;
-  if (!userId) return res.status(400).json({ error: 'userId is required' });
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ error: 'Требуется авторизация' });
   const user = db.getUser(userId);
   user.agreedToTerms = true;
   db.save();
@@ -1553,8 +1546,8 @@ app.post('/api/user/agree-terms', (req, res) => {
 });
 
 app.post('/api/user/claim-cashback', (req, res) => {
-  const userId = req.userId || req.body.userId;
-  if (!userId) return res.status(400).json({ error: 'userId is required' });
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ error: 'Требуется авторизация' });
   const isFriday = new Date().getDay() === 5;
   if (!isFriday) {
     return res.status(400).json({ error: 'Вывод кэшбэка доступен только по пятницам!' });
@@ -1767,26 +1760,6 @@ app.get('/api/settings/public', (req, res) => {
     crashRtp: db.data.settings?.crashRtp || 'auto',
     boxesRtp: db.data.settings?.boxesRtp || 'auto'
   });
-});
-
-app.get('/api/admin/settings', (req, res) => {
-  const adminId = req.query.adminId || req.query.userId || '';
-  if (!db.isAdmin(adminId)) {
-    return res.status(403).json({ error: 'Доступ запрещён' });
-  }
-  res.json({ success: true, settings: db.data.settings || {} });
-});
-
-app.post('/api/admin/settings', (req, res) => {
-  const { adminUserId, settings } = req.body;
-  if (!db.isAdmin(adminUserId)) {
-    return res.status(403).json({ error: 'Доступ запрещён' });
-  }
-  if (!db.data.settings) db.data.settings = {};
-  Object.assign(db.data.settings, settings || {});
-  db.save();
-  console.log(`[Admin Settings] ⚙️ Updated settings:`, settings);
-  res.json({ success: true, settings: db.data.settings });
 });
 
 // ==========================================
@@ -2590,14 +2563,21 @@ async function rejectWithdrawal(withdrawalId, adminName = 'Администра�
 
 app.post('/api/payments/withdraw', async (req, res) => {
   try {
-    const { userId, method, amount, address } = req.body;
+    const withdrawalUserId = String(req.userId || req.body.userId || '');
+    if (!withdrawalUserId) {
+      return res.status(401).json({ error: 'Требуется авторизация' });
+    }
+    if (req.userId && req.body.userId && String(req.body.userId) !== String(req.userId)) {
+      return res.status(403).json({ error: 'Запрещено запрашивать вывод от имени другого пользователя' });
+    }
+    const { method, amount, address } = req.body;
     const numAmount = parseFloat(amount);
 
     if (isNaN(numAmount) || numAmount < 5) {
       return res.status(400).json({ error: 'Минимальная сумма вывода $5.00' });
     }
 
-    const user = db.getUser(userId);
+    const user = db.getUser(withdrawalUserId);
     if ((user.balance || 0) < numAmount) {
       return res.status(400).json({ error: 'Недостаточно средств на балансе' });
     }
@@ -2635,7 +2615,7 @@ app.post('/api/payments/withdraw', async (req, res) => {
 
     const withdrawalRecord = {
       id: withdrawalId,
-      userId: String(userId),
+      userId: String(withdrawalUserId),
       username: user.name || '',
       amount: numAmount,
       method,
@@ -2651,13 +2631,13 @@ app.post('/api/payments/withdraw', async (req, res) => {
     db.save();
     db.syncUserToSupabase(user);
 
-    console.log(`[WithdrawRequest] 📥 Withdrawal #${withdrawalId} requested: $${numAmount} via ${methodName} by user ${userId}`);
+    console.log(`[WithdrawRequest] 📥 Withdrawal #${withdrawalId} requested: $${numAmount} via ${methodName} by user ${withdrawalUserId}`);
 
     // Send notification to group and admin PMs
     if (telegramBot) {
       const safeWId = escapeHtml(withdrawalId);
       const safeUser = escapeHtml(user.name || 'Пользователь');
-      const safeUid = escapeHtml(userId);
+      const safeUid = escapeHtml(withdrawalUserId);
       const safeMethod = escapeHtml(methodName);
       const safeAddr = (address && address.trim()) ? escapeHtml(address.trim()) : '';
       const adminText = 
@@ -2734,24 +2714,58 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Server-Side Admin PIN Verification
-app.post('/api/admin/verify-pin', (req, res) => {
-  const adminId = req.userId || req.body.adminId || '';
-  if (!db.isAdmin(adminId)) {
-    return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
-  }
-  const { pin } = req.body || {};
-  const validPins = [process.env.ADMIN_PIN, '2026', '8281'].filter(Boolean);
-  if (pin && validPins.includes(String(pin).trim())) {
-    return res.json({ success: true, authorized: true });
-  }
-  return res.status(401).json({ error: 'Неверный PIN-код администратора' });
-});
-
 // ==========================================
 // ADMIN API (PROTECTED WITH ADMIN MIDDLEWARE)
 // ==========================================
 app.use('/api/admin', adminMiddleware(db));
+
+// Admin PIN Verification (Server-Side)
+app.post('/api/admin/verify-pin', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ success: false, error: 'Доступ запрещён: требуются права администратора' });
+  }
+  const { pin } = req.body || {};
+  const validPins = [process.env.ADMIN_PIN, ADMIN_PIN, '2026', '8281'].filter(Boolean);
+  if (pin && validPins.includes(String(pin).trim())) {
+    return res.json({ success: true, authorized: true, message: 'Доступ к панели управления подтверждён' });
+  }
+  return res.status(401).json({ success: false, error: 'Неверный PIN-код администратора' });
+});
+
+// Admin Game & Global Settings
+app.get('/api/admin/settings', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён' });
+  }
+  res.json({ success: true, settings: db.data.settings || {} });
+});
+
+app.post('/api/admin/settings', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён' });
+  }
+  const { settings } = req.body;
+  if (!db.data.settings) db.data.settings = {};
+  Object.assign(db.data.settings, settings || {});
+  db.save();
+  console.log(`[Admin Settings] ⚙️ Updated settings by admin ${adminId}:`, settings);
+  res.json({ success: true, settings: db.data.settings });
+});
+
+// Admin Crash Multiplier Control (Strictly Protected)
+app.post('/api/crash/admin-multiplier', adminMiddleware(db), (req, res) => {
+  const { multiplier } = req.body;
+  if (multiplier && !isNaN(parseFloat(multiplier))) {
+    crashEngine.customNextMult = parseFloat(multiplier);
+    console.log(`[Crash 24/7] 🛠️ Admin queued next multiplier: x${crashEngine.customNextMult}`);
+    return res.json({ success: true, nextMult: crashEngine.customNextMult });
+  }
+  crashEngine.customNextMult = null;
+  res.json({ success: true, nextMult: null });
+});
 
 app.get('/api/admin/info', (req, res) => {
   res.json({
@@ -2815,10 +2829,11 @@ app.get('/api/admin/check', (req, res) => {
 // ==========================================
 app.post('/api/admin/treasury/create-invoice', async (req, res) => {
   try {
-    const { adminId, method, amount } = req.body;
-    if (!db.isAdmin(adminId)) {
+    const adminId = req.userId;
+    if (!adminId || !db.isAdmin(adminId)) {
       return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
     }
+    const { method, amount } = req.body;
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount < 0.5) {
       return res.status(400).json({ error: 'Минимальная сумма пополнения казны $0.50' });
@@ -2976,10 +2991,11 @@ app.post('/api/admin/treasury/create-invoice', async (req, res) => {
 
 app.post('/api/admin/treasury/check-invoice', async (req, res) => {
   try {
-    const { adminId, invoiceId, method, forceConfirm } = req.body;
-    if (!db.isAdmin(adminId)) {
+    const adminId = req.userId;
+    if (!adminId || !db.isAdmin(adminId)) {
       return res.status(403).json({ error: 'Доступ запрещён' });
     }
+    const { invoiceId, method, forceConfirm } = req.body;
     const inv = db.data.invoices[invoiceId];
     if (!inv) {
       return res.status(404).json({ error: 'Счёт не найден' });
@@ -3029,10 +3045,11 @@ app.post('/api/admin/treasury/check-invoice', async (req, res) => {
 });
 
 app.post('/api/admin/treasury/set', (req, res) => {
-  const { adminId, amount } = req.body;
-  if (!db.isAdmin(adminId)) {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
     return res.status(403).json({ error: 'Доступ запрещён' });
   }
+  const { amount } = req.body;
   const val = parseFloat(amount);
   if (isNaN(val)) return res.status(400).json({ error: 'Неверная сумма' });
   db.data.treasury = parseFloat(val.toFixed(2));
@@ -3041,8 +3058,8 @@ app.post('/api/admin/treasury/set', (req, res) => {
 });
 
 app.get('/api/admin/db/overview', (req, res) => {
-  const adminId = req.query.adminId || req.query.userId || '';
-  if (!db.isAdmin(adminId)) {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
     return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
   }
   const stats = db.getOverviewStats();
@@ -3055,8 +3072,8 @@ app.get('/api/admin/db/overview', (req, res) => {
 });
 
 app.get('/api/admin/db/users', (req, res) => {
-  const adminId = req.query.adminId || req.query.userId || '';
-  if (!db.isAdmin(adminId)) {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
     return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
   }
   const search = String(req.query.search || '').trim().toLowerCase();
@@ -3071,11 +3088,11 @@ app.get('/api/admin/db/users', (req, res) => {
 });
 
 app.get('/api/admin/db/user', (req, res) => {
-  const adminId = req.query.adminId || req.query.userId || '';
-  const targetUserId = req.query.targetUserId || '';
-  if (!db.isAdmin(adminId)) {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
     return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
   }
+  const targetUserId = req.query.targetUserId || '';
   const user = db.getUserFull(targetUserId);
   if (!user) {
     return res.status(404).json({ error: `Пользователь с ID "${targetUserId}" не найден` });
@@ -3084,10 +3101,11 @@ app.get('/api/admin/db/user', (req, res) => {
 });
 
 app.post('/api/admin/db/user/update', (req, res) => {
-  const { adminUserId, targetUserId, patch } = req.body;
-  if (!db.isAdmin(adminUserId)) {
+  const adminUserId = req.userId;
+  if (!adminUserId || !db.isAdmin(adminUserId)) {
     return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
   }
+  const { targetUserId, patch } = req.body;
   if (!targetUserId) {
     return res.status(400).json({ error: 'Не указан ID пользователя' });
   }
@@ -3097,10 +3115,11 @@ app.post('/api/admin/db/user/update', (req, res) => {
 });
 
 app.post('/api/admin/db/user/set-admin', (req, res) => {
-  const { adminUserId, targetUserId, isAdmin } = req.body;
-  if (!db.isAdmin(adminUserId)) {
+  const adminUserId = req.userId;
+  if (!adminUserId || !db.isAdmin(adminUserId)) {
     return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
   }
+  const { targetUserId, isAdmin } = req.body;
   if (!targetUserId) {
     return res.status(400).json({ error: 'Не указан ID пользователя' });
   }
@@ -3113,8 +3132,8 @@ app.post('/api/admin/db/user/set-admin', (req, res) => {
 });
 
 app.post('/api/admin/db/reset-terms', (req, res) => {
-  const { adminUserId } = req.body;
-  if (!db.isAdmin(adminUserId)) {
+  const adminUserId = req.userId;
+  if (!adminUserId || !db.isAdmin(adminUserId)) {
     return res.status(403).json({ error: 'Доступ запрещён.' });
   }
   Object.values(db.data.users || {}).forEach(u => {
@@ -3126,18 +3145,19 @@ app.post('/api/admin/db/reset-terms', (req, res) => {
 });
 
 app.get('/api/admin/db/withdrawals', (req, res) => {
-  const adminId = req.query.adminId || req.query.userId || '';
-  if (!db.isAdmin(adminId)) {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
     return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
   }
   res.json({ success: true, withdrawals: db.data.withdrawals || [] });
 });
 
 app.post('/api/admin/db/withdrawals/status', async (req, res) => {
-  const { adminUserId, withdrawalId, status } = req.body;
-  if (!db.isAdmin(adminUserId)) {
+  const adminUserId = req.userId;
+  if (!adminUserId || !db.isAdmin(adminUserId)) {
     return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
   }
+  const { withdrawalId, status } = req.body;
   const item = (db.data.withdrawals || []).find(w => w.id === withdrawalId);
   if (!item) {
     return res.status(404).json({ error: 'Заявка не найдена' });

@@ -26,7 +26,7 @@ export default function SubscriptionModal() {
   if (hasAgreedToTerms !== true) return null;
 
   // 4. Admins or already subscribed users bypass the gate
-  const isUserAdmin = isAdmin || String(tgUser?.id) === APP_CONFIG.superAdminId;
+  const isUserAdmin = Boolean(isAdmin);
   if (isSubscribed === true || isUserAdmin) return null;
 
   const handleOpenChannel = (e) => {

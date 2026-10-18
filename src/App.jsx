@@ -28,7 +28,7 @@ import { APP_CONFIG } from './config';
 
 export default function App() {
   const { activeTab, activeModal, toast, isAdmin, tgUser } = useApp();
-  const isUserAdmin = isAdmin || String(tgUser?.id) === APP_CONFIG.superAdminId;
+  const isUserAdmin = Boolean(isAdmin);
 
   return (
     <div className="app-container">

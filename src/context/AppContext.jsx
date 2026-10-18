@@ -143,8 +143,8 @@ export function AppProvider({ children }) {
     } catch (e) {}
 
     return { 
-      name: 'Пользователь', 
-      id: APP_CONFIG.superAdminId, 
+      name: 'Гость', 
+      id: 'guest_' + Math.random().toString(36).substring(2, 9), 
       photoUrl: null, 
       initials: 'RX' 
     };
@@ -309,29 +309,6 @@ export function AppProvider({ children }) {
             }
           } catch (e) {}
         }
-
-        // 3. Fallback for testing/browser outside Telegram (Zero manual input!):
-        // Automatically create a session for the default/dev user
-        try {
-          const devUserId = tgUser?.id || APP_CONFIG.superAdminId;
-          const devRes = await fetch('/api/auth/dev-login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: devUserId })
-          });
-          const devData = await devRes.json();
-          if (devData.success && devData.token) {
-            token = devData.token;
-            setSessionToken(token);
-            try { localStorage.setItem('rx_session_token', token); } catch(e){}
-            if (!isCancelled && devData.user) {
-              applyServerUserData(devData.user, devData.isAdmin);
-            }
-          }
-        } catch (e) {
-          console.warn('[AutoAuth] Dev fallback note:', e);
-        }
-
       } finally {
         if (!isCancelled) {
           setIsDbLoaded(true);
@@ -762,31 +739,31 @@ export function AppProvider({ children }) {
   };
 
   // Admin Privilege check (superAdminId, plus any assigned admins)
-  const [isAdmin, setIsAdmin] = useState(() => {
-    return String(tgUser?.id) === APP_CONFIG.superAdminId;
-  });
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     async function checkAdminStatus() {
       const currentId = String(tgUser?.id || '');
-      if (currentId === APP_CONFIG.superAdminId) {
-        setIsAdmin(true);
+      if (!currentId || currentId.startsWith('guest_')) {
+        setIsAdmin(false);
         return;
       }
       try {
-        const res = await fetch(`/api/admin/check?userId=${currentId}`);
+        const res = await fetch(`/api/admin/check?userId=${currentId}`, {
+          headers: getAuthHeaders()
+        });
         if (res.ok) {
           const data = await res.json();
-          setIsAdmin(!!data.isAdmin || currentId === APP_CONFIG.superAdminId);
+          setIsAdmin(Boolean(data.isAdmin));
         } else {
-          setIsAdmin(currentId === APP_CONFIG.superAdminId);
+          setIsAdmin(false);
         }
       } catch (e) {
-        setIsAdmin(currentId === APP_CONFIG.superAdminId);
+        setIsAdmin(false);
       }
     }
     checkAdminStatus();
-  }, [tgUser.id]);
+  }, [tgUser?.id]);
 
   // Admin Auth helper
   const [isAdminAuthed, setIsAdminAuthed] = useState(() => {

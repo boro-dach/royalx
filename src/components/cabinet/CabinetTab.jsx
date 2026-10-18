@@ -16,7 +16,7 @@ export default function CabinetTab() {
   const { tgUser, balance, setActiveModal, getCurrentRankInfo, totalTurnover, isAdmin, logout } = useApp();
   const { current, next, progressPercent } = getCurrentRankInfo();
 
-  const isUserAdmin = isAdmin || String(tgUser?.id) === APP_CONFIG.superAdminId;
+  const isUserAdmin = Boolean(isAdmin);
 
   const menuItems = [
     ...(isUserAdmin ? [{
