@@ -8,6 +8,7 @@ import Preloader from './components/layout/Preloader';
 
 // Tabs
 import MainTab from './components/main/MainTab';
+import EarnTab from './components/earn/EarnTab';
 import PromosTab from './components/promos/PromosTab';
 import CabinetTab from './components/cabinet/CabinetTab';
 
@@ -41,6 +42,7 @@ export default function App() {
       {/* Main Tab Content with Smooth Transition */}
       <div className="tab-page-wrapper" key={activeTab}>
         {activeTab === 'main' && <MainTab />}
+        {activeTab === 'earn' && <EarnTab />}
         {activeTab === 'promos' && <PromosTab />}
         {activeTab === 'cabinet' && <CabinetTab />}
       </div>

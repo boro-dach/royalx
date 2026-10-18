@@ -1,12 +1,13 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { HomeIcon, GiftIcon, UserIcon } from '../common/Icons';
+import { HomeIcon, EarnIcon, GiftIcon, UserIcon } from '../common/Icons';
 
 export default function BottomNav() {
   const { activeTab, setActiveTab } = useApp();
 
   const tabs = [
     { id: 'main', label: 'Главная', Icon: HomeIcon },
+    { id: 'earn', label: 'Заработок', Icon: EarnIcon },
     { id: 'promos', label: 'Акции', Icon: GiftIcon },
     { id: 'cabinet', label: 'Кабинет', Icon: UserIcon }
   ];
@@ -29,6 +30,7 @@ export default function BottomNav() {
       <div 
         className="nav-active-pill"
         style={{
+          width: `calc((100% - 12px) / ${tabs.length})`,
           transform: `translateX(${activeIndex * 100}%)`
         }}
       />

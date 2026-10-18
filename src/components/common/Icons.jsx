@@ -330,5 +330,105 @@ export function DollarIcon(props) {
   return <TetherIcon {...props} />;
 }
 
+export function ChevronDownIcon({ size = 18, color = 'currentColor', style = {} }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={style}>
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+  );
+}
+
+export function EarnIcon({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+      <circle cx="12" cy="12" r="2.5"></circle>
+      <path d="M6 12h.01M18 12h.01"></path>
+    </svg>
+  );
+}
+
+export function RubleIcon({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M8 19V5h6a4 4 0 0 1 0 8H8"></path>
+      <line x1="6" y1="13" x2="14" y2="13"></line>
+      <line x1="6" y1="17" x2="12" y2="17"></line>
+    </svg>
+  );
+}
+
+export function TelegramPaperPlaneIcon({ size = 20, color = '#2AABEE' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="12" fill={color}/>
+      <path d="M6.3 11.8l10.8-4.2c.5-.2 1 .2.8.7l-1.8 8.6c-.1.6-.8.8-1.3.5l-3.1-2.3-1.5 1.4c-.2.2-.4.3-.7.3l.2-3.1 5.7-5.1c.2-.2 0-.5-.3-.3l-7 4.4-2.6-.8c-.6-.2-.6-1 0-1.2z" fill="#ffffff"/>
+    </svg>
+  );
+}
+
+export function TikTokIcon({ size = 24 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect width="24" height="24" rx="6" fill="#010101" />
+      <path d="M16.5 8.2c-.8-.5-1.4-1.3-1.6-2.2H12v10.5c0 1.4-1.1 2.5-2.5 2.5s-2.5-1.1-2.5-2.5 1.1-2.5 2.5-2.5c.3 0 .6.1.9.2V11c-.3 0-.6-.1-.9-.1-3 0-5.5 2.5-5.5 5.5s2.5 5.5 5.5 5.5 5.5-2.5 5.5-5.5V10c1.1.8 2.5 1.3 4 1.3V8.4c-1 0-1.8-.4-2.5-1.2v1z" fill="#ffffff" />
+      <path d="M16 8.2c-.8-.5-1.4-1.3-1.6-2.2H12v.6h.4c.2.8.8 1.5 1.6 1.9 1 .6 2.2.7 3.5.3V8c-1 .2-2.1.2-2.9-.3z" fill="#00f2fe" opacity="0.8" />
+      <path d="M12.5 16.7c0 1.4-1.1 2.5-2.5 2.5-.6 0-1.2-.2-1.6-.6.5.9 1.5 1.6 2.6 1.6 1.7 0 3-1.3 3-3v-7.5h-1.5v7z" fill="#fe2c55" opacity="0.8" />
+    </svg>
+  );
+}
+
+export function CommentBubbleIcon({ size = 28 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <defs>
+        <linearGradient id="commGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ff416c" />
+          <stop offset="100%" stopColor="#8a2387" />
+        </linearGradient>
+        <linearGradient id="coinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffd700" />
+          <stop offset="100%" stopColor="#ffaa00" />
+        </linearGradient>
+      </defs>
+      {/* Speech bubble */}
+      <path d="M6 8C6 5.79 7.79 4 10 4H22C24.21 4 26 5.79 26 8V18C26 20.21 24.21 22 22 22H13L8 26V22H10C8.79 22 6 20.21 6 18V8Z" fill="url(#commGrad)" />
+      {/* Dots in speech bubble */}
+      <circle cx="11" cy="13" r="1.5" fill="#ffffff" />
+      <circle cx="16" cy="13" r="1.5" fill="#ffffff" />
+      <circle cx="21" cy="13" r="1.5" fill="#ffffff" />
+      {/* Coin at bottom right */}
+      <circle cx="24" cy="23" r="5.5" fill="url(#coinGrad)" stroke="#1a1c26" strokeWidth="1.5" />
+      <circle cx="24" cy="23" r="3.5" fill="none" stroke="#ffe066" strokeWidth="0.8" strokeDasharray="1 1" />
+      <text x="24" y="25" fontSize="6" fontWeight="bold" fill="#7a4800" textAnchor="middle" fontFamily="sans-serif">₽</text>
+    </svg>
+  );
+}
+
+export function Gift3DIcon({ size = 32 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <defs>
+        <linearGradient id="giftBody" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#8a2be2" />
+          <stop offset="100%" stopColor="#4a00e0" />
+        </linearGradient>
+        <linearGradient id="giftRibbon" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#00f2fe" />
+          <stop offset="100%" stopColor="#4facfe" />
+        </linearGradient>
+      </defs>
+      {/* Box */}
+      <rect x="5" y="13" width="22" height="14" rx="3" fill="url(#giftBody)" />
+      {/* Lid */}
+      <rect x="4" y="9" width="24" height="5" rx="2" fill="#9d4edd" />
+      {/* Vertical ribbon */}
+      <rect x="14" y="9" width="4" height="18" fill="url(#giftRibbon)" />
+      {/* Bows */}
+      <path d="M12 9C9 9 9 5 12 5C14 5 15 8 16 9C17 8 18 5 20 5C23 5 23 9 20 9H12Z" fill="url(#giftRibbon)" />
+    </svg>
+  );
+}
+
 
 
