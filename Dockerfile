@@ -1,42 +1,27 @@
 # syntax = docker/dockerfile:1
+ARG NODE_VERSION=20-slim
+FROM node:${NODE_VERSION}
 
-# Adjust NODE_VERSION as desired
-ARG NODE_VERSION=22.21.1
-FROM node:${NODE_VERSION}-slim AS base
-
-LABEL fly_launch_runtime="Vite"
-
-# Vite app lives here
 WORKDIR /app
 
-# Set production environment
 ENV NODE_ENV="production"
+ENV PORT=3000
 
-
-# Throw-away build stage to reduce size of final image
-FROM base AS build
-
-# Install packages needed to build node modules
+# Install dependencies needed for native modules
 RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
+    apt-get install --no-install-recommends -y python3 make g++ && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install node modules
-COPY package-lock.json package.json ./
+# Install node dependencies
+COPY package.json package-lock.json ./
 RUN npm ci
 
-# Copy application code
+# Copy full application code
 COPY . .
 
-# Build application
+# Build Next.js frontend into dist/
 RUN npm run build
 
+EXPOSE 3000
 
-# Final stage for app image
-FROM nginx
-
-# Copy built application
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Start the server by default, this can be overwritten at runtime
-EXPOSE 80
-CMD [ "/usr/sbin/nginx", "-g", "daemon off;" ]
+CMD ["npm", "start"]
