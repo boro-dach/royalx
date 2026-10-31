@@ -1,31 +1,31 @@
 import React from 'react';
 import { useApp } from './context/AppContext';
 
-// Layout
-import Header from './components/layout/Header';
-import BottomNav from './components/layout/BottomNav';
-import Preloader from './components/layout/Preloader';
+// Widgets (layout)
+import Header from './widgets/header/ui/Header';
+import BottomNav from './widgets/bottom-nav/ui/BottomNav';
+import Preloader from './widgets/preloader/ui/Preloader';
 
-// Tabs
-import MainTab from './components/main/MainTab';
-import EarnTab from './components/earn/EarnTab';
-import PromosTab from './components/promos/PromosTab';
-import CabinetTab from './components/cabinet/CabinetTab';
+// Pages-view (tabs)
+import MainTab from './pages-view/main/ui/MainTab';
+import EarnTab from './features/earn/ui/EarnTab';
+import PromosTab from './features/promo/ui/PromosTab';
+import CabinetTab from './pages-view/cabinet/ui/CabinetTab';
 
-// Modals & Overlays
-import FinanceModal from './components/modals/FinanceModal';
-import HistoryModal from './components/modals/HistoryModal';
-import SupportModal from './components/modals/SupportModal';
-import ReferralModal from './components/modals/ReferralModal';
-import PromocodeModal from './components/modals/PromocodeModal';
-import StatsModal from './components/modals/StatsModal';
-import RanksModal from './components/modals/RanksModal';
-import AdminModal from './components/modals/AdminModal';
-import TermsModal from './components/modals/TermsModal';
-import SubscriptionModal from './components/modals/SubscriptionModal';
-import GameOverlay from './components/games/GameOverlay';
-import Toast from './components/common/Toast';
-import { APP_CONFIG } from './config';
+// Features & pages-view (modals)
+import FinanceModal from './features/finance/ui/FinanceModal';
+import HistoryModal from './pages-view/history/ui/HistoryModal';
+import SupportModal from './pages-view/support/ui/SupportModal';
+import ReferralModal from './pages-view/referral/ui/ReferralModal';
+import PromocodeModal from './features/promo/ui/PromocodeModal';
+import StatsModal from './pages-view/stats/ui/StatsModal';
+import RanksModal from './pages-view/ranks/ui/RanksModal';
+import AdminModal from './features/admin/ui/AdminModal';
+import TermsModal from './features/auth/ui/TermsModal';
+import SubscriptionModal from './features/auth/ui/SubscriptionModal';
+import GameOverlay from './widgets/game-overlay/ui/GameOverlay';
+import Toast from './shared/ui/Toast';
+import { APP_CONFIG } from './shared/config';
 
 export default function App() {
   const { activeTab, activeModal, toast, isAdmin, tgUser } = useApp();

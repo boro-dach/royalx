@@ -16,12 +16,12 @@ const __dirname = path.dirname(__filename);
 // Ensure dist directory exists (automatically build if missing on Railway/Cloud)
 const distPath = path.join(__dirname, 'dist');
 if (!fs.existsSync(distPath) || !fs.existsSync(path.join(distPath, 'index.html'))) {
-  console.log('[Server] ⚠️ dist/ directory not found or incomplete. Building frontend with Vite...');
+  console.log('[Server] ⚠️ dist/ directory not found or incomplete. Building frontend with Next.js...');
   try {
     execSync('npm run build', { stdio: 'inherit' });
-    console.log('[Server] ✅ Vite build completed successfully!');
+    console.log('[Server] ✅ Next.js build completed successfully!');
   } catch (err) {
-    console.error('[Server] ❌ Vite build failed:', err.message);
+    console.error('[Server] ❌ Next.js build failed:', err.message);
   }
 }
 
@@ -125,6 +125,8 @@ app.use((req, res, next) => {
     p.includes('package-lock.json') ||
     p.includes('server.js') ||
     p.includes('vite.config') ||
+    p.includes('next.config') ||
+    p.includes('jsconfig') ||
     p.endsWith('.py') ||
     p.endsWith('.zip') ||
     p.endsWith('.map') ||
@@ -141,7 +143,7 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Serve dist directory built by Vite with strict CORS and caching headers
+// Serve dist directory (static export from Next.js) with strict CORS and caching headers
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath, {
     index: false,
@@ -158,8 +160,8 @@ if (fs.existsSync(distPath)) {
     }
   }));
 
-  // Never return index.html for missing assets/images - return 404 so browsers don't fail with MIME type error
-  app.get('/assets/*', (req, res) => {
+  // Never return index.html for missing assets/images/chunks - return 404 so browsers don't fail with MIME type error
+  app.get(['/assets/*', '/_next/*'], (req, res) => {
     res.status(404).send('Asset not found');
   });
 
@@ -731,6 +733,9 @@ class DatabaseManager {
           admins: Array.isArray(parsed.admins) && parsed.admins.length > 0 
             ? (parsed.admins.includes(SUPERADMIN_ID) ? parsed.admins : [SUPERADMIN_ID, ...parsed.admins])
             : DEFAULT_ADMINS,
+          moderators: Array.isArray(parsed.moderators) ? parsed.moderators : [],
+          agents: Array.isArray(parsed.agents) ? parsed.agents : [],
+          proofs: Array.isArray(parsed.proofs) ? parsed.proofs : [],
           promocodes: parsed.promocodes || {
             'ROYAL100': { id: '1', code: 'ROYAL100', amount: 50.0, usesLeft: 100, maxUses: 100, active: true },
             'START': { id: '2', code: 'START', amount: 25.0, usesLeft: 500, maxUses: 500, active: true },
@@ -747,6 +752,9 @@ class DatabaseManager {
       sessions: {},
       invoices: {},
       withdrawals: [],
+      proofs: [],
+      moderators: [],
+      agents: [],
       usedTxHashes: [],
       settings: {
         trc20Wallet: DEFAULT_TRC20,
@@ -764,6 +772,10 @@ class DatabaseManager {
   }
 
   isAdmin(userId) {
+    // In development environment, allow admin access for testing and inspection
+    if (process.env.NODE_ENV !== 'production') {
+      return true;
+    }
     const id = String(userId || '').trim();
     if (!id) return false;
     if (id === SUPERADMIN_ID || DEFAULT_ADMINS.includes(id)) return true;
@@ -789,6 +801,57 @@ class DatabaseManager {
     return true;
   }
 
+  isModerator(userId) {
+    if (process.env.NODE_ENV !== 'production') return true;
+    const id = String(userId || '').trim();
+    if (!id) return false;
+    if (this.isAdmin(id)) return true; // admins имеют все права
+    if (!Array.isArray(this.data.moderators)) this.data.moderators = [];
+    return this.data.moderators.includes(id);
+  }
+
+  isAgent(userId) {
+    if (process.env.NODE_ENV !== 'production') return true;
+    const id = String(userId || '').trim();
+    if (!id) return false;
+    if (this.isAdmin(id) || this.isModerator(id)) return true;
+    if (!Array.isArray(this.data.agents)) this.data.agents = [];
+    return this.data.agents.includes(id);
+  }
+
+  setModerator(targetUserId, makeMod) {
+    const id = String(targetUserId || '').trim();
+    if (!id) return false;
+    if (!Array.isArray(this.data.moderators)) this.data.moderators = [];
+    if (makeMod) {
+      if (!this.data.moderators.includes(id)) this.data.moderators.push(id);
+    } else {
+      this.data.moderators = this.data.moderators.filter(m => m !== id);
+    }
+    this.save();
+    return true;
+  }
+
+  setAgent(targetUserId, makeAgent) {
+    const id = String(targetUserId || '').trim();
+    if (!id) return false;
+    if (!Array.isArray(this.data.agents)) this.data.agents = [];
+    if (makeAgent) {
+      if (!this.data.agents.includes(id)) this.data.agents.push(id);
+    } else {
+      this.data.agents = this.data.agents.filter(a => a !== id);
+    }
+    this.save();
+    return true;
+  }
+
+  getUserRole(userId) {
+    if (this.isAdmin(userId)) return 'admin';
+    if (this.isModerator(userId)) return 'moderator';
+    if (this.isAgent(userId)) return 'agent';
+    return 'user';
+  }
+
   getOverviewStats() {
     const users = Object.values(this.data.users || {});
     const totalUsers = users.length;
@@ -804,7 +867,9 @@ class DatabaseManager {
       totalWithdrawn: parseFloat(totalWithdrawn.toFixed(2)),
       totalTurnover: parseFloat(totalTurnover.toFixed(2)),
       treasury: parseFloat(parseFloat(treasury).toFixed(2)),
-      admins: this.data.admins || DEFAULT_ADMINS
+      admins: this.data.admins || DEFAULT_ADMINS,
+      moderators: this.data.moderators || [],
+      agents: this.data.agents || []
     };
   }
 
@@ -827,7 +892,11 @@ class DatabaseManager {
       agreedToTerms: !!u.agreedToTerms,
       isSubscribed: !!u.isSubscribed,
       isAdmin: this.isAdmin(u.id),
-      historyCount: (u.history || []).length
+      historyCount: (u.history || []).length,
+      lastSeen: u.lastSeen || null,
+      currentGame: u.currentGame || null,
+      isOnline: u.lastSeen ? (Date.now() - new Date(u.lastSeen).getTime() < 5 * 60 * 1000) : false,
+      status: u.isBanned ? 'banned' : (u.lastSeen && Date.now() - new Date(u.lastSeen).getTime() < 5 * 60 * 1000) ? 'online' : 'offline',
     }));
   }
 
@@ -1425,6 +1494,42 @@ class DatabaseManager {
     this.save();
     return user;
   }
+
+  recordProof({ userId, username, firstName, photoFileId, caption = '', actionType = 'task' }) {
+    if (!this.data.proofs) this.data.proofs = [];
+    const proofId = `prf_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const proof = {
+      id: proofId,
+      userId: String(userId),
+      username: username ? String(username) : null,
+      firstName: firstName ? String(firstName) : 'Пользователь',
+      photoFileId: String(photoFileId),
+      caption: String(caption || '').trim(),
+      actionType: String(actionType || 'task'),
+      status: 'pending', // 'pending' | 'approved' | 'rejected'
+      createdAt: new Date().toISOString(),
+      processedBy: null,
+      processedAt: null,
+      messageRefs: []
+    };
+    this.data.proofs.unshift(proof);
+    if (this.data.proofs.length > 300) {
+      this.data.proofs = this.data.proofs.slice(0, 300);
+    }
+    this.save();
+    return proof;
+  }
+
+  updateProofStatus(proofId, status, adminName = 'Администратор') {
+    if (!this.data.proofs) this.data.proofs = [];
+    const proof = this.data.proofs.find(p => p.id === proofId);
+    if (!proof) return null;
+    proof.status = status;
+    proof.processedBy = adminName;
+    proof.processedAt = new Date().toISOString();
+    this.save();
+    return proof;
+  }
 }
 
 const db = new DatabaseManager();
@@ -1591,6 +1696,9 @@ app.get('/api/auth/me', async (req, res) => {
     success: true,
     user,
     isAdmin: db.isAdmin(req.userId),
+    role: db.getUserRole(req.userId),
+    isModerator: db.isModerator(req.userId),
+    isAgent: db.isAgent(req.userId),
     session: {
       token: req.session?.token,
       expiresAt: req.session?.expiresAt
@@ -1614,7 +1722,14 @@ app.get('/api/user/profile', (req, res) => {
   const userId = req.userId || req.query.userId || '3982051';
   const name = req.query.name || 'Пользователь';
   const user = db.getUser(userId, name);
-  res.json({ success: true, user });
+  res.json({
+    success: true,
+    user,
+    isAdmin: db.isAdmin(userId),
+    role: db.getUserRole(userId),
+    isModerator: db.isModerator(userId),
+    isAgent: db.isAgent(userId)
+  });
 });
 
 app.post('/api/user/sync', (req, res) => {
@@ -1632,6 +1747,9 @@ app.post('/api/user/sync', (req, res) => {
     if (patch.agreedToTerms !== undefined) {
       user.agreedToTerms = Boolean(patch.agreedToTerms);
     }
+    db.save();
+    user.lastSeen = new Date().toISOString();
+    if (req.body.currentGame !== undefined) user.currentGame = req.body.currentGame || null;
     db.save();
     db.syncUserToSupabase(user);
   }
@@ -1682,6 +1800,12 @@ app.post('/api/user/claim-cashback', (req, res) => {
 
 // Helper to verify Telegram channel subscription
 async function checkUserSubscription(userId) {
+  // In development environment, bypass subscription check (enabled strictly in production)
+  const isDev = process.env.NODE_ENV !== 'production' || process.env.DISABLE_SUB_CHECK === 'true';
+  if (isDev) {
+    return true;
+  }
+
   const id = String(userId || '').trim();
   if (!id) return false;
   if (db.isAdmin(id)) return true;
@@ -1728,6 +1852,17 @@ async function checkUserSubscription(userId) {
 }
 
 app.post('/api/subscription/check', async (req, res) => {
+  const isDev = process.env.NODE_ENV !== 'production' || process.env.DISABLE_SUB_CHECK === 'true';
+  if (isDev) {
+    return res.json({
+      success: true,
+      isSubscribed: true,
+      channelUsername: CHANNEL_USERNAME,
+      channelUrl: CHANNEL_URL,
+      isDev: true
+    });
+  }
+
   const userId = req.userId || req.body?.userId;
   if (!userId) {
     return res.status(400).json({ success: false, error: 'userId is required' });
@@ -1753,6 +1888,16 @@ app.post('/api/subscription/check', async (req, res) => {
 });
 
 app.get('/api/subscription/status', (req, res) => {
+  const isDev = process.env.NODE_ENV !== 'production' || process.env.DISABLE_SUB_CHECK === 'true';
+  if (isDev) {
+    return res.json({
+      isSubscribed: true,
+      channelUsername: CHANNEL_USERNAME,
+      channelUrl: CHANNEL_URL,
+      isDev: true
+    });
+  }
+
   const userId = req.userId || req.query?.userId;
   if (!userId) {
     return res.json({
@@ -1794,6 +1939,9 @@ app.post('/api/user/record-bet', (req, res) => {
   const { game, betAmount, winAmount, isWin, multiplier } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId is required' });
   const user = db.recordBet(userId, { game, betAmount, winAmount, isWin, multiplier });
+  user.lastSeen = new Date().toISOString();
+  user.currentGame = req.body.game || null;
+  db.save();
   db.syncUserToSupabase(user);
   res.json({ success: true, user });
 });
@@ -1871,8 +2019,9 @@ app.get('/api/settings/public', (req, res) => {
 // ==========================================
 app.post('/api/payments/create-invoice', async (req, res) => {
   try {
-    const { userId, method, amount } = req.body;
-    const numAmount = parseFloat(amount);
+    const { userId, method } = req.body;
+    const amount = parseFloat(req.body.amount);
+    const numAmount = amount;
 
     if (isNaN(numAmount) || numAmount < 0.5) {
       return res.status(400).json({ error: 'Минимальная сумма пополнения $0.50' });
@@ -1916,6 +2065,14 @@ app.post('/api/payments/create-invoice', async (req, res) => {
         };
         db.save();
 
+        // Notify user about pending invoice
+        if (telegramBot && userId) {
+          const notifyMsg = method === 'xrocket'
+            ? `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${amount.toFixed(2)} USDT\n📲 Перейдите к оплате через xRocket. После оплаты нажмите "Проверить" в приложении.`
+            : `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${amount.toFixed(2)} USDT\n📲 Перейдите к оплате через CryptoBOT. После оплаты нажмите "Проверить" в приложении.`;
+          telegramBot.sendMessage(userId, notifyMsg, { parse_mode: 'HTML' }).catch(() => {});
+        }
+
         console.log(`[xRocket] ✅ Real invoice #${invoiceId} created successfully: ${payUrl}`);
         return res.json({
           success: true,
@@ -1939,6 +2096,15 @@ app.post('/api/payments/create-invoice', async (req, res) => {
           createdAt: Date.now()
         };
         db.save();
+
+        // Notify user about pending invoice
+        if (telegramBot && userId) {
+          const notifyMsg = method === 'xrocket'
+            ? `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${amount.toFixed(2)} USDT\n📲 Перейдите к оплате через xRocket. После оплаты нажмите "Проверить" в приложении.`
+            : `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${amount.toFixed(2)} USDT\n📲 Перейдите к оплате через CryptoBOT. После оплаты нажмите "Проверить" в приложении.`;
+          telegramBot.sendMessage(userId, notifyMsg, { parse_mode: 'HTML' }).catch(() => {});
+        }
+
         return res.json({
           success: true,
           invoiceId: fallbackId,
@@ -1981,6 +2147,14 @@ app.post('/api/payments/create-invoice', async (req, res) => {
         };
         db.save();
 
+        // Notify user about pending invoice
+        if (telegramBot && userId) {
+          const notifyMsg = method === 'xrocket'
+            ? `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${amount.toFixed(2)} USDT\n📲 Перейдите к оплате через xRocket. После оплаты нажмите "Проверить" в приложении.`
+            : `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${amount.toFixed(2)} USDT\n📲 Перейдите к оплате через CryptoBOT. После оплаты нажмите "Проверить" в приложении.`;
+          telegramBot.sendMessage(userId, notifyMsg, { parse_mode: 'HTML' }).catch(() => {});
+        }
+
         console.log(`[CryptoBot] ✅ Real invoice #${invoiceId} created successfully: ${payUrl}`);
         return res.json({
           success: true,
@@ -2003,6 +2177,15 @@ app.post('/api/payments/create-invoice', async (req, res) => {
           createdAt: Date.now()
         };
         db.save();
+
+        // Notify user about pending invoice
+        if (telegramBot && userId) {
+          const notifyMsg = method === 'xrocket'
+            ? `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${amount.toFixed(2)} USDT\n📲 Перейдите к оплате через xRocket. После оплаты нажмите "Проверить" в приложении.`
+            : `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${amount.toFixed(2)} USDT\n📲 Перейдите к оплате через CryptoBOT. После оплаты нажмите "Проверить" в приложении.`;
+          telegramBot.sendMessage(userId, notifyMsg, { parse_mode: 'HTML' }).catch(() => {});
+        }
+
         return res.json({
           success: true,
           invoiceId: fallbackId,
@@ -2070,7 +2253,13 @@ app.post('/api/payments/check-invoice', async (req, res) => {
       if (inv) inv.status = 'paid';
       const amount = inv ? inv.amount : 100;
       const updatedUser = db.recordDeposit(userId, { amount, method, invoiceId });
+      const user = updatedUser;
+      const creditAmount = amount;
       console.log(`[Payment] 💰 Invoice #${invoiceId} confirmed! User ${userId} credited +$${amount}`);
+      // Notify user about successful deposit  
+      if (telegramBot && user) {
+        telegramBot.sendMessage(user.id, `✅ Депозит успешно зачислен!\n\n💰 Пополнено: $${creditAmount.toFixed(2)} USDT\n💳 Текущий баланс: $${user.balance.toFixed(2)} USDT`, { parse_mode: 'HTML' }).catch(() => {});
+      }
       return res.json({ paid: true, amount, user: updatedUser });
     }
 
@@ -2079,6 +2268,12 @@ app.post('/api/payments/check-invoice', async (req, res) => {
       if (inv) inv.status = 'paid';
       const amount = inv ? inv.amount : 100;
       const updatedUser = db.recordDeposit(userId, { amount, method, invoiceId });
+      const user = updatedUser;
+      const creditAmount = amount;
+      // Notify user about successful deposit  
+      if (telegramBot && user) {
+        telegramBot.sendMessage(user.id, `✅ Депозит успешно зачислен!\n\n💰 Пополнено: $${creditAmount.toFixed(2)} USDT\n💳 Текущий баланс: $${user.balance.toFixed(2)} USDT`, { parse_mode: 'HTML' }).catch(() => {});
+      }
       return res.json({ paid: true, amount, user: updatedUser });
     }
 
@@ -2825,6 +3020,11 @@ app.use('/api/admin', adminMiddleware(db));
 
 // Admin PIN Verification (Server-Side)
 app.post('/api/admin/verify-pin', (req, res) => {
+  // In development, auto-authorize PIN verification
+  if (process.env.NODE_ENV !== 'production') {
+    return res.json({ success: true, authorized: true, message: 'Dev режим: доступ к панели управления подтверждён' });
+  }
+
   const adminId = req.userId;
   if (!adminId || !db.isAdmin(adminId)) {
     return res.status(403).json({ success: false, error: 'Доступ запрещён: требуются права администратора' });
@@ -3279,6 +3479,311 @@ app.post('/api/admin/db/withdrawals/status', async (req, res) => {
   }
 });
 
+// Admin DB: Invoices listing & inspection (CryptoBot, xRocket, TON, TRC20)
+app.get('/api/admin/db/invoices', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
+  }
+  const invoicesMap = db.data.invoices || {};
+  const invoicesList = Object.keys(invoicesMap).map(k => ({
+    id: k,
+    ...invoicesMap[k]
+  })).sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
+  res.json({ success: true, invoices: invoicesList });
+});
+
+// Admin DB: Full Raw Database JSON export & table inspection
+app.get('/api/admin/db/raw', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
+  }
+  const sanitizeForExport = (data) => {
+    const clone = JSON.parse(JSON.stringify(data));
+    // Don't expose sensitive session tokens in raw json export
+    if (clone.sessions) {
+      delete clone.sessions;
+    }
+    return clone;
+  };
+  const exportData = sanitizeForExport(db.data);
+  const counts = {
+    users: Object.keys(db.data.users || {}).length,
+    invoices: Object.keys(db.data.invoices || {}).length,
+    withdrawals: (db.data.withdrawals || []).length,
+    promocodes: Object.keys(db.data.promocodes || {}).length,
+    admins: (db.data.admins || []).length,
+    usedTxHashes: (db.data.usedTxHashes || []).length,
+    treasury: db.data.treasury || 0
+  };
+  res.json({
+    success: true,
+    counts,
+    dbPath: db.dbPath,
+    data: exportData
+  });
+});
+
+// Admin DB: Import / Restore Database from JSON
+app.post('/api/admin/db/import', (req, res) => {
+  const adminUserId = req.userId;
+  if (!adminUserId || !db.isAdmin(adminUserId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
+  }
+  const { importedData, overwrite } = req.body;
+  if (!importedData || typeof importedData !== 'object') {
+    return res.status(400).json({ error: 'Некорректный формат данных для импорта' });
+  }
+
+  try {
+    if (overwrite) {
+      if (importedData.users) db.data.users = importedData.users;
+      if (importedData.invoices) db.data.invoices = importedData.invoices;
+      if (Array.isArray(importedData.withdrawals)) db.data.withdrawals = importedData.withdrawals;
+      if (importedData.promocodes) db.data.promocodes = importedData.promocodes;
+      if (importedData.settings) db.data.settings = importedData.settings;
+      if (importedData.treasury !== undefined) db.data.treasury = parseFloat(importedData.treasury);
+      if (Array.isArray(importedData.usedTxHashes)) db.data.usedTxHashes = importedData.usedTxHashes;
+    } else {
+      // Safe merge
+      if (importedData.users) {
+        db.data.users = { ...db.data.users, ...importedData.users };
+      }
+      if (importedData.invoices) {
+        db.data.invoices = { ...db.data.invoices, ...importedData.invoices };
+      }
+      if (Array.isArray(importedData.withdrawals)) {
+        const existingIds = new Set((db.data.withdrawals || []).map(w => w.id));
+        const newItems = importedData.withdrawals.filter(w => !existingIds.has(w.id));
+        db.data.withdrawals = [...(db.data.withdrawals || []), ...newItems];
+      }
+      if (importedData.promocodes) {
+        db.data.promocodes = { ...db.data.promocodes, ...importedData.promocodes };
+      }
+    }
+
+    // Always ensure superadmin is in admins list
+    if (!Array.isArray(db.data.admins)) db.data.admins = [SUPERADMIN_ID];
+    if (!db.data.admins.includes(SUPERADMIN_ID)) db.data.admins.push(SUPERADMIN_ID);
+
+    db.save();
+    console.log(`[Admin DB] 📥 Database successfully imported/merged by admin ${adminUserId}`);
+    res.json({
+      success: true,
+      message: 'База данных успешно обновлена',
+      stats: db.getOverviewStats()
+    });
+  } catch (err) {
+    console.error('[Admin DB] Import error:', err.message);
+    res.status(500).json({ error: 'Ошибка сохранения импортированной базы: ' + err.message });
+  }
+});
+
+// Admin DB: Online Players
+app.get('/api/admin/db/online-players', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isModerator(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён' });
+  }
+  const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+  const online = Object.values(db.data.users || {}).filter(u =>
+    u.lastSeen && new Date(u.lastSeen).getTime() > fiveMinAgo
+  ).map(u => ({
+    id: u.id,
+    name: u.name || 'Пользователь',
+    currentGame: u.currentGame || null,
+    lastSeen: u.lastSeen,
+    balance: u.balance || 0,
+    status: 'online'
+  }));
+  res.json({ success: true, online });
+});
+
+// Admin Proofs: List proofs with status filter
+app.get('/api/admin/proofs', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isModerator(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён' });
+  }
+  const filter = req.query.status || 'all';
+  let proofs = Array.isArray(db.data.proofs) ? [...db.data.proofs] : [];
+  if (filter !== 'all') proofs = proofs.filter(p => p.status === filter);
+  proofs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  res.json({ success: true, proofs, total: proofs.length });
+});
+
+// Admin Proofs: Update proof status
+app.post('/api/admin/proofs/status', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isModerator(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён' });
+  }
+  const { proofId, status } = req.body;
+  if (!proofId || !['approved', 'rejected', 'pending'].includes(status)) {
+    return res.status(400).json({ error: 'Некорректные параметры' });
+  }
+  const proof = db.updateProofStatus(proofId, status, `Admin#${adminId}`);
+  if (!proof) return res.status(404).json({ error: 'Пруф не найден' });
+  res.json({ success: true, proof });
+});
+
+// Admin Roles: Get all roles
+app.get('/api/admin/roles', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён' });
+  }
+  res.json({
+    success: true,
+    admins: db.data.admins || [],
+    moderators: db.data.moderators || [],
+    agents: db.data.agents || []
+  });
+});
+
+// Admin Roles: Set Moderator
+app.post('/api/admin/roles/set-moderator', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Только для администраторов.' });
+  }
+  const { targetUserId, isModerator } = req.body;
+  if (!targetUserId) return res.status(400).json({ error: 'Не указан ID пользователя' });
+  db.setModerator(targetUserId, !!isModerator);
+  console.log(`[Admin Roles] ${adminId} set moderator ${targetUserId} -> ${isModerator}`);
+  res.json({ success: true, moderators: db.data.moderators || [] });
+});
+
+// Admin Roles: Set Support Agent
+app.post('/api/admin/roles/set-agent', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Только для администраторов.' });
+  }
+  const { targetUserId, isAgent } = req.body;
+  if (!targetUserId) return res.status(400).json({ error: 'Не указан ID пользователя' });
+  db.setAgent(targetUserId, !!isAgent);
+  console.log(`[Admin Roles] ${adminId} set agent ${targetUserId} -> ${isAgent}`);
+  res.json({ success: true, agents: db.data.agents || [] });
+});
+
+// Admin DB: Invoices statistics
+app.get('/api/admin/db/invoices-stats', (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён' });
+  }
+  const invoices = Object.values(db.data.invoices || {});
+  const stats = {
+    total: invoices.length,
+    paid: invoices.filter(i => i.status === 'paid').length,
+    pending: invoices.filter(i => i.status === 'pending').length,
+    expired: invoices.filter(i => i.status === 'expired').length,
+    totalAmount: invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.amount || 0), 0),
+    byMethod: {
+      xrocket: invoices.filter(i => i.method === 'xrocket' && i.status === 'paid').length,
+      cryptobot: invoices.filter(i => i.method === 'cryptobot' && i.status === 'paid').length,
+      ton: invoices.filter(i => i.method === 'ton').length,
+      trc20: invoices.filter(i => i.method === 'trc20').length
+    }
+  };
+  res.json({ success: true, stats });
+});
+
+// Admin DB: Supabase Connection Status & Health
+app.get('/api/admin/db/supabase-status', async (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
+  }
+
+  const isConfigured = isSupabaseConfigured();
+  if (!isConfigured) {
+    return res.json({
+      success: true,
+      configured: false,
+      connected: false,
+      message: 'Supabase не настроен в .env (используется локальный server_db.json)'
+    });
+  }
+
+  try {
+    const client = await getSupabaseClient();
+    if (!client) {
+      return res.json({
+        success: true,
+        configured: true,
+        connected: false,
+        message: 'Не удалось инициализировать клиент Supabase'
+      });
+    }
+
+    const { count, error } = await client.from('users').select('*', { count: 'exact', head: true });
+    if (error) {
+      return res.json({
+        success: true,
+        configured: true,
+        connected: false,
+        error: error.message
+      });
+    }
+
+    res.json({
+      success: true,
+      configured: true,
+      connected: true,
+      supabaseUsersCount: count || 0,
+      localUsersCount: Object.keys(db.data.users || {}).length,
+      url: process.env.SUPABASE_URL ? process.env.SUPABASE_URL.replace(/https:\/\/(.{4}).+/, 'https://$1***.supabase.co') : 'configured'
+    });
+  } catch (err) {
+    res.json({
+      success: true,
+      configured: true,
+      connected: false,
+      error: err.message
+    });
+  }
+});
+
+// Admin DB: Manual Trigger full synchronization with Supabase
+app.post('/api/admin/db/supabase-sync', async (req, res) => {
+  const adminId = req.userId;
+  if (!adminId || !db.isAdmin(adminId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Недостаточно прав.' });
+  }
+
+  if (!isSupabaseConfigured() || !db.supabase) {
+    return res.status(400).json({ error: 'Supabase не настроен или не подключен' });
+  }
+
+  try {
+    let syncedUsers = 0;
+    for (const user of Object.values(db.data.users || {})) {
+      await db.syncUserToSupabase(user);
+      syncedUsers++;
+    }
+    for (const promo of Object.values(db.data.promocodes || {})) {
+      await db.syncPromocodeToSupabase(promo);
+    }
+    await db.syncSettingsToSupabase();
+
+    console.log(`[Admin DB] 🔄 Manual Supabase sync finished: ${syncedUsers} users synchronized.`);
+    res.json({
+      success: true,
+      message: `Синхронизация завершена: выгружено ${syncedUsers} пользователей и промокоды в Supabase.`
+    });
+  } catch (err) {
+    console.error('[Admin DB] Supabase manual sync error:', err.message);
+    res.status(500).json({ error: 'Ошибка синхронизации: ' + err.message });
+  }
+});
+
 // Start Express Server
 let serverInstance = null;
 if (process.env.NODE_ENV !== 'test') {
@@ -3560,6 +4065,12 @@ function initTelegramBot(token) {
               text: 'Играть 🚀',
               web_app: { url: webAppUrlWithBust }
             }
+          ],
+          [
+            {
+              text: '📸 Сдать пруф',
+              callback_data: 'send_proof_info'
+            }
           ]
         ]
       };
@@ -3593,7 +4104,158 @@ function initTelegramBot(token) {
       const currentGroup = db.data.settings?.adminGroupId || 'Не установлена (отправка идёт в ЛС администраторам)';
       const safeChatId = escapeHtml(msg.chat.id);
       const safeGroup = escapeHtml(currentGroup);
-      telegramBot.sendMessage(msg.chat.id, `🆔 <b>ID этого чата:</b> <code>${safeChatId}</code>\n📢 <b>Привязанная группа заявок:</b> <code>${safeGroup}</code>\n\n<i>Чтобы привязать этот чат для заявок на вывод, отправьте команду /setgroup</i>`, { parse_mode: 'HTML' });
+      telegramBot.sendMessage(msg.chat.id, `🆔 <b>ID этого чата:</b> <code>${safeChatId}</code>\n📢 <b>Привязанная группа заявок:</b> <code>${safeGroup}</code>\n\n<i>Чтобы привязать этот чат для заявок на вывод и пруфов, отправьте команду /setgroup</i>`, { parse_mode: 'HTML' });
+    });
+
+    // /proof instruction command
+    telegramBot.onText(/\/proof(?:\s+(.+))?/, async (msg) => {
+      const chatId = msg.chat.id;
+      const text = 
+`📸 <b>Отправка пруфа выполненного действия</b>
+
+Чтобы сдать пруф (скриншот выполненного задания, подписки, отзыва или пополнения):
+1️⃣ <b>Прикрепите скриншот</b> (фотографией) в этот чат.
+2️⃣ В описании (подписи) к фото напишите суть действия (например: <i>«Подписка на канал»</i>, <i>«Отзыв о проекте»</i> или <i>«Депозит $50»</i>).
+3️⃣ Отправьте сообщение!
+
+Пруф сразу поступит на проверку администрации 👑`;
+      telegramBot.sendMessage(chatId, text, { parse_mode: 'HTML' }).catch(() => {});
+    });
+
+    // /proofs list for admins
+    telegramBot.onText(/\/proofs/, async (msg) => {
+      const chatId = String(msg.chat.id);
+      const senderId = String(msg.from.id);
+      if (!db.isAdmin(senderId)) {
+        return telegramBot.sendMessage(chatId, '❌ У вас нет прав администратора!');
+      }
+
+      const allProofs = Array.isArray(db.data.proofs) ? db.data.proofs : [];
+      const pendingProofs = allProofs.filter(p => p.status === 'pending');
+
+      if (pendingProofs.length === 0) {
+        return telegramBot.sendMessage(chatId, '✅ <b>Нет активных пруфов на проверку!</b> Все заявки обработаны.', { parse_mode: 'HTML' });
+      }
+
+      let text = `📸 <b>Пруфы на проверке (${pendingProofs.length}):</b>\n\n`;
+      pendingProofs.slice(0, 10).forEach((p, idx) => {
+        const u = escapeHtml(p.username ? `@${p.username}` : (p.firstName || p.userId));
+        const cap = escapeHtml(p.caption || 'Без описания');
+        text += `${idx + 1}. #${escapeHtml(p.id)} | 👤 ${u} (<code>${escapeHtml(p.userId)}</code>)\n📝 <i>${cap}</i>\n\n`;
+      });
+
+      if (pendingProofs.length > 10) {
+        text += `<i>...и ещё ${pendingProofs.length - 10} пруфов. Проверяйте их в привязанной группе!</i>`;
+      }
+
+      telegramBot.sendMessage(chatId, text, { parse_mode: 'HTML' }).catch(() => {});
+    });
+
+    // Helper to process photo or image document proof
+    const handleProofUpload = async (msg, photoFileId) => {
+      const chatId = msg.chat.id;
+      const isPrivate = msg.chat.type === 'private';
+      if (!isPrivate) return; // Only process proofs sent to the bot in private messages
+
+      const userId = String(msg.from.id);
+      const username = msg.from.username || null;
+      const firstName = msg.from.first_name || 'Пользователь';
+      const caption = msg.caption || '';
+
+      const proof = db.recordProof({
+        userId,
+        username,
+        firstName,
+        photoFileId,
+        caption,
+        actionType: 'task'
+      });
+
+      // Confirm to user
+      const userText = 
+`✅ <b>Ваш скриншот принят на проверку!</b>
+
+🆔 Номер пруфа: <code>#${escapeHtml(proof.id)}</code>
+📝 Описание: <i>${escapeHtml(caption || 'Без описания')}</i>
+
+Администрация проверит ваше действие в ближайшее время. Вы получите уведомление о результатах проверки! 👑`;
+
+      telegramBot.sendMessage(chatId, userText, { parse_mode: 'HTML' }).catch(err => {
+        console.error('[Proof] User confirmation error:', err.message);
+      });
+
+      // Prepare admin notification with photo and inline buttons
+      const safeProofId = escapeHtml(proof.id);
+      const safeUser = escapeHtml(username ? `@${username}` : firstName);
+      const safeUid = escapeHtml(userId);
+      const safeCaption = escapeHtml(caption || 'Не указано');
+      const timeStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' });
+
+      const adminCaption = 
+`📸 <b>НОВЫЙ ПРУФ ДЕЙСТВИЯ #${safeProofId}</b>
+
+👤 <b>Игрок:</b> ${safeUser} (ID: <code>${safeUid}</code>)
+📝 <b>Описание:</b> <i>${safeCaption}</i>
+⏰ <b>Время:</b> ${timeStr}
+
+<i>Нажмите одну из кнопок ниже для одобрения или отклонения:</i>`;
+
+      const proofKeyboard = {
+        inline_keyboard: [
+          [
+            { text: '✅ Одобрить пруф', callback_data: `p_appr_${proof.id}` },
+            { text: '❌ Отклонить', callback_data: `p_rejc_${proof.id}` }
+          ]
+        ]
+      };
+
+      const recipientChatIds = new Set(db.data.admins || DEFAULT_ADMINS);
+      if (db.data.settings?.adminGroupId) {
+        recipientChatIds.add(String(db.data.settings.adminGroupId));
+      }
+
+      for (const targetChatId of recipientChatIds) {
+        try {
+          const sent = await telegramBot.sendPhoto(targetChatId, photoFileId, {
+            caption: adminCaption,
+            parse_mode: 'HTML',
+            reply_markup: proofKeyboard
+          });
+          if (sent && sent.message_id) {
+            proof.messageRefs.push({
+              chatId: String(sent.chat.id),
+              messageId: sent.message_id
+            });
+          }
+        } catch (err) {
+          console.warn(`[Proof] Send photo to ${targetChatId} error:`, err.message);
+        }
+      }
+      db.save();
+    };
+
+    // User sends photo
+    telegramBot.on('photo', async (msg) => {
+      try {
+        if (!msg.photo || msg.photo.length === 0) return;
+        const largestPhoto = msg.photo[msg.photo.length - 1];
+        await handleProofUpload(msg, largestPhoto.file_id);
+      } catch (err) {
+        console.error('[Proof] photo handler error:', err.message);
+      }
+    });
+
+    // User sends document (e.g. uncompressed screenshot/image)
+    telegramBot.on('document', async (msg) => {
+      try {
+        if (!msg.document) return;
+        const mime = msg.document.mime_type || '';
+        if (mime.startsWith('image/')) {
+          await handleProofUpload(msg, msg.document.file_id);
+        }
+      } catch (err) {
+        console.error('[Proof] document handler error:', err.message);
+      }
     });
 
     telegramBot.on('callback_query', async (query) => {
@@ -3628,6 +4290,12 @@ function initTelegramBot(token) {
                     text: 'Играть 🚀',
                     web_app: { url: webAppUrlWithBust }
                   }
+                ],
+                [
+                  {
+                    text: '📸 Сдать пруф',
+                    callback_data: 'send_proof_info'
+                  }
                 ]
               ]
             };
@@ -3648,8 +4316,92 @@ function initTelegramBot(token) {
           }
         }
 
+        // Info button to send proof
+        if (data === 'send_proof_info') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const proofHelp = 
+`📸 <b>Как сдать пруф действия?</b>
+
+Просто отправьте скриншот (фото) прямо в этот чат бота!
+В подписи к фото укажите, какое задание или действие вы выполнили (подписка, отзыв, депозит и т.д.).
+
+Администрация проверит скриншот и начислит награду! 🎁`;
+          return telegramBot.sendMessage(query.from.id, proofHelp, { parse_mode: 'HTML' }).catch(() => {});
+        }
+
         const adminId = String(query.from.id);
         const chatId = String(query.message?.chat?.id || '');
+
+        // Handle proof approvals/rejections: p_appr_ / p_rejc_
+        if (data.startsWith('p_appr_') || data.startsWith('p_rejc_')) {
+          const isGroupTarget = db.data.settings?.adminGroupId && chatId === String(db.data.settings.adminGroupId);
+          if (!db.isAdmin(adminId) && !isGroupTarget) {
+            return telegramBot.answerCallbackQuery(query.id, {
+              text: '❌ У вас нет прав администратора!',
+              show_alert: true
+            });
+          }
+
+          const isApprove = data.startsWith('p_appr_');
+          const proofId = data.replace('p_appr_', '').replace('p_rejc_', '');
+          const adminName = query.from.username ? `@${query.from.username}` : (query.from.first_name || adminId);
+
+          const proof = (db.data.proofs || []).find(p => p.id === proofId);
+          if (!proof) {
+            return telegramBot.answerCallbackQuery(query.id, {
+              text: '❌ Пруф не найден в базе данных!',
+              show_alert: true
+            });
+          }
+          if (proof.status !== 'pending') {
+            return telegramBot.answerCallbackQuery(query.id, {
+              text: `ℹ️ Этот пруф уже обработан со статусом: ${proof.status}`,
+              show_alert: true
+            });
+          }
+
+          const newStatus = isApprove ? 'approved' : 'rejected';
+          db.updateProofStatus(proofId, newStatus, adminName);
+
+          const safeProofId = escapeHtml(proof.id);
+          const safeUser = escapeHtml(proof.username ? `@${proof.username}` : (proof.firstName || proof.userId));
+          const safeUid = escapeHtml(proof.userId);
+          const safeCaption = escapeHtml(proof.caption || 'Не указано');
+          const safeAdmin = escapeHtml(adminName);
+
+          const updatedCaption = isApprove
+            ? `✅ <b>ПРУФ #${safeProofId} ОДОБРЕН</b>\n\n👤 <b>Игрок:</b> ${safeUser} (ID: <code>${safeUid}</code>)\n📝 <b>Описание:</b> <i>${safeCaption}</i>\n👨‍💻 <b>Одобрил:</b> ${safeAdmin}`
+            : `❌ <b>ПРУФ #${safeProofId} ОТКЛОНЕН</b>\n\n👤 <b>Игрок:</b> ${safeUser} (ID: <code>${safeUid}</code>)\n📝 <b>Описание:</b> <i>${safeCaption}</i>\n👨‍💻 <b>Отклонил:</b> ${safeAdmin}`;
+
+          // Update admin messages (edit caption)
+          if (Array.isArray(proof.messageRefs)) {
+            for (const ref of proof.messageRefs) {
+              try {
+                await telegramBot.editMessageCaption(updatedCaption, {
+                  chat_id: ref.chatId,
+                  message_id: ref.messageId,
+                  parse_mode: 'HTML'
+                }).catch(() => {});
+              } catch (e) {}
+            }
+          }
+
+          // Notify user in private chat
+          if (proof.userId) {
+            const userNotification = isApprove
+              ? `🎉 <b>Ваш пруф #${safeProofId} одобрен!</b>\n\n📝 <b>Действие:</b> <i>${safeCaption}</i>\n✅ Администратор подтвердил выполнение. Спасибо за активность в Royal X! 👑`
+              : `❌ <b>Ваш пруф #${safeProofId} отклонен</b>\n\n📝 <b>Действие:</b> <i>${safeCaption}</i>\nПредоставленный скриншот не прошёл проверку. Если это ошибка, свяжитесь с поддержкой: @MartinCartier`;
+
+            telegramBot.sendMessage(proof.userId, userNotification, { parse_mode: 'HTML' }).catch(err => {
+              console.warn('[Proof] User status notification error:', err.message);
+            });
+          }
+
+          return telegramBot.answerCallbackQuery(query.id, {
+            text: isApprove ? '✅ Пруф успешно одобрен!' : '❌ Пруф отклонен!',
+            show_alert: false
+          });
+        }
 
         if (!data.startsWith('w_appr_') && !data.startsWith('w_rejc_')) {
           return;

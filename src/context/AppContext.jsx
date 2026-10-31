@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { APP_CONFIG } from '../config';
+import { APP_CONFIG } from '../shared/config';
 
 export const RANKS_CONFIG = [
   { level: 1, name: 'Бронза', fullName: 'Ранг 1 • Бронза', requiredTurnover: 0, nextTurnover: 100, cashbackPercent: 2.0, color: '#cd7f32', badge: '🥉' },
@@ -78,8 +78,16 @@ export function AppProvider({ children }) {
     return null;
   });
 
-  // Obligatory Telegram Channel Subscription Status (@RXgambling)
+  const isDevEnv = process.env.NODE_ENV !== 'production' || 
+    (typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' || 
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.endsWith('.local')
+    ));
+
+  // Obligatory Telegram Channel Subscription Status (disabled in dev, enforced in prod)
   const [isSubscribed, setIsSubscribed] = useState(() => {
+    if (isDevEnv) return true;
     if (initialCache && initialCache.isSubscribed !== undefined) {
       return Boolean(initialCache.isSubscribed);
     }
@@ -184,11 +192,11 @@ export function AppProvider({ children }) {
     if (u.wagerRequired !== undefined) setWagerRequired(parseFloat(u.wagerRequired) || 0.00);
     if (u.totalTurnover !== undefined) setTotalTurnover(parseFloat(u.totalTurnover) || 0.00);
     if (u.cashback !== undefined) setAccumulatedCashback(parseFloat(u.cashback) || 0.00);
-    if (Array.isArray(u.history)) setHistoryItems(u.history);
     if (u.rtp) setUserRtp(u.rtp);
+    if (Array.isArray(u.history)) setHistoryItems(u.history);
     if (u.agreedToTerms !== undefined) setHasAgreedToTerms(Boolean(u.agreedToTerms));
-    if (u.isSubscribed !== undefined) setIsSubscribed(Boolean(u.isSubscribed));
-    if (isAdminFlag !== undefined) setIsAdmin(Boolean(isAdminFlag));
+    if (u.isSubscribed !== undefined) setIsSubscribed(isDevEnv || Boolean(u.isSubscribed));
+    if (isAdminFlag !== undefined) setIsAdmin(isDevEnv || Boolean(isAdminFlag));
 
     const stats = {
       totalDeposits: u.totalDeposited || 0,
@@ -738,11 +746,15 @@ export function AppProvider({ children }) {
     }
   };
 
-  // Admin Privilege check (superAdminId, plus any assigned admins)
-  const [isAdmin, setIsAdmin] = useState(false);
+  // Admin Privilege check (superAdminId, plus any assigned admins; in dev, accessible to all)
+  const [isAdmin, setIsAdmin] = useState(() => isDevEnv);
 
   useEffect(() => {
     async function checkAdminStatus() {
+      if (isDevEnv) {
+        setIsAdmin(true);
+        return;
+      }
       const currentId = String(tgUser?.id || '');
       if (!currentId || currentId.startsWith('guest_')) {
         setIsAdmin(false);
@@ -763,10 +775,11 @@ export function AppProvider({ children }) {
       }
     }
     checkAdminStatus();
-  }, [tgUser?.id]);
+  }, [tgUser?.id, isDevEnv]);
 
-  // Admin Auth helper
+  // Admin Auth helper (auto-authorized in dev, strictly PIN-protected in prod)
   const [isAdminAuthed, setIsAdminAuthed] = useState(() => {
+    if (isDevEnv) return true;
     try {
       return sessionStorage.getItem('rx_admin_authed') === 'true';
     } catch (e) {

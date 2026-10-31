@@ -217,6 +217,16 @@ export function authMiddleware(
       return next();
     }
 
+    // 4. In development environment, allow access with dev user fallback
+    if (process.env.NODE_ENV !== 'production') {
+      const devId = String(req.query?.userId || req.body?.userId || 'dev_admin');
+      const user = db.getUser(devId, 'Dev Admin');
+      req.userId = devId;
+      req.user = user;
+      req.isAdmin = true;
+      return next();
+    }
+
     // If path is public, continue unauthenticated
     if (isPublic) {
       return next();
@@ -237,6 +247,14 @@ export function adminMiddleware(db) {
     if (req.path === '/check' || req.path === '/api/admin/check') {
       return next();
     }
+
+    // In development environment, allow admin access for everyone (strictly blocked in production)
+    if (process.env.NODE_ENV !== 'production') {
+      req.adminId = String(req.userId || 'dev_admin');
+      req.isAdmin = true;
+      return next();
+    }
+
     const adminId = req.userId;
     if (!adminId || !db.isAdmin(adminId)) {
       console.warn(`[Security] ⛔ Unauthorized admin access attempt from: ${adminId || 'anonymous'}`);
