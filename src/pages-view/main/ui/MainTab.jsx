@@ -1,40 +1,32 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { SearchIcon, CloseIcon, ChevronRightIcon, Wheel3DIcon, FireBadgeIcon } from '@/shared/ui/Icons';
+import { SearchIcon, CloseIcon, ChevronRightIcon, Wheel3DIcon } from '@/shared/ui/Icons';
 
 export default function MainTab() {
   const { setActiveGame, setActiveTab, showToast } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCarouselIndex, setActiveCarouselIndex] = useState(0);
 
-  // Popular games carousel
+  // Popular games (using ready-made cards)
   const popularGames = [
     {
       id: 'dice',
-      badge: 'Популярное',
       title: 'Кости',
-      subtitle: 'Игра',
       image: '/cards/Dice.png'
     },
     {
       id: 'mines',
-      badge: 'Популярное',
       title: 'Мины',
-      subtitle: 'Игра',
       image: '/cards/Mines.png'
     },
     {
       id: 'boxes',
-      badge: 'Популярное',
       title: 'Боксы',
-      subtitle: 'Игра',
       image: '/cards/Boxes.png'
     },
     {
       id: 'bj',
-      badge: 'Популярное',
       title: 'Блэкджек',
-      subtitle: 'Игра',
       image: '/cards/Blackjack.png'
     }
   ];
@@ -48,30 +40,21 @@ export default function MainTab() {
     { id: 'coin', title: 'Орёл-Решка', icon: '🪙', isSoon: true }
   ];
 
-  // Exclusive games
+  // Exclusive games (using ready-made cards)
   const exclusiveGames = [
     {
       id: 'crash',
-      badge: 'Fast',
-      badgeType: 'fast',
       title: 'Краш',
-      subtitle: 'Игра',
       image: '/cards/Crash.png'
     },
     {
       id: 'upgrade',
-      badge: 'Luck',
-      badgeType: 'luck',
       title: 'Upgrader',
-      subtitle: 'Игра',
       image: '/cards/Upgrader.png'
     },
     {
       id: 'boxes',
-      badge: 'VIP',
-      badgeType: 'vip',
       title: 'Боксы',
-      subtitle: 'Игра',
       image: '/cards/Boxes.png'
     }
   ];
@@ -80,11 +63,11 @@ export default function MainTab() {
   const allCatalog = [
     ...popularGames,
     ...exclusiveGames.filter(g => !popularGames.some(p => p.id === g.id)),
-    { id: 'keno', title: 'Кено', subtitle: 'Скоро', image: null, isSoon: true },
-    { id: 'hilo', title: 'Hi-Lo', subtitle: 'Скоро', image: null, isSoon: true },
-    { id: 'wheel', title: 'Wheel', subtitle: 'Скоро', image: null, isSoon: true },
-    { id: 'rb', title: 'R&B', subtitle: 'Скоро', image: null, isSoon: true },
-    { id: 'coin', title: 'Орёл-Решка', subtitle: 'Скоро', image: null, isSoon: true }
+    { id: 'keno', title: 'Кено', image: null, icon: '🧿', isSoon: true },
+    { id: 'hilo', title: 'Hi-Lo', image: null, icon: '🌈', isSoon: true },
+    { id: 'wheel', title: 'Wheel', image: null, icon: '🎡', isSoon: true },
+    { id: 'rb', title: 'R&B', image: null, icon: '🪬', isSoon: true },
+    { id: 'coin', title: 'Орёл-Решка', image: null, icon: '🪙', isSoon: true }
   ];
 
   const handleLaunchGame = (gameId, isSoon = false, title = '') => {
@@ -156,28 +139,25 @@ export default function MainTab() {
               {searchResults.map((game) => (
                 <div 
                   key={game.id} 
-                  className="game-card-vertical"
+                  className="game-card-direct"
                   onClick={() => handleLaunchGame(game.id, game.isSoon, game.title)}
                   role="button"
                   tabIndex={0}
+                  aria-label={game.title}
                 >
-                  {game.badge && (
-                    <div className="game-card-badge">
-                      <FireBadgeIcon size={10} />
-                      <span>{game.badge}</span>
+                  {game.image ? (
+                    <img 
+                      src={game.image} 
+                      alt={game.title} 
+                      className="game-card-direct-img" 
+                      decoding="async" 
+                    />
+                  ) : (
+                    <div className="game-card-direct-placeholder">
+                      <span className="game-card-placeholder-icon">{game.icon || '🎲'}</span>
+                      <span className="game-card-placeholder-title">{game.title}</span>
                     </div>
                   )}
-                  <div className="game-card-visual">
-                    {game.image ? (
-                      <img src={game.image} alt={game.title} className="game-card-thumb" />
-                    ) : (
-                      <div className="game-card-thumb-placeholder">{game.icon || '🎲'}</div>
-                    )}
-                  </div>
-                  <div className="game-card-footer">
-                    <div className="game-card-title">{game.title}</div>
-                    <div className="game-card-subtitle">{game.subtitle || 'Игра'}</div>
-                  </div>
                 </div>
               ))}
             </div>
@@ -228,29 +208,19 @@ export default function MainTab() {
               {popularGames.map((game) => (
                 <div 
                   key={game.id}
-                  className="game-card-vertical popular-card"
+                  className="game-card-direct"
                   onClick={() => handleLaunchGame(game.id, false, game.title)}
                   role="button"
                   tabIndex={0}
+                  aria-label={game.title}
                 >
-                  <div className="game-card-badge">
-                    <FireBadgeIcon size={11} />
-                    <span>{game.badge}</span>
-                  </div>
-
-                  <div className="game-card-visual">
-                    <img 
-                      src={game.image} 
-                      alt={game.title} 
-                      className="game-card-thumb" 
-                      loading="eager"
-                    />
-                  </div>
-
-                  <div className="game-card-footer">
-                    <div className="game-card-title">{game.title}</div>
-                    <div className="game-card-subtitle">{game.subtitle}</div>
-                  </div>
+                  <img 
+                    src={game.image} 
+                    alt={game.title} 
+                    className="game-card-direct-img" 
+                    loading="eager"
+                    decoding="async"
+                  />
                 </div>
               ))}
             </div>
@@ -295,28 +265,19 @@ export default function MainTab() {
               {exclusiveGames.map((game) => (
                 <div 
                   key={game.id}
-                  className="game-card-vertical exclusive-card"
+                  className="game-card-direct"
                   onClick={() => handleLaunchGame(game.id, false, game.title)}
                   role="button"
                   tabIndex={0}
+                  aria-label={game.title}
                 >
-                  <div className={`game-card-badge badge-${game.badgeType}`}>
-                    <span>{game.badge}</span>
-                  </div>
-
-                  <div className="game-card-visual">
-                    <img 
-                      src={game.image} 
-                      alt={game.title} 
-                      className="game-card-thumb" 
-                      loading="lazy"
-                    />
-                  </div>
-
-                  <div className="game-card-footer">
-                    <div className="game-card-title">{game.title}</div>
-                    <div className="game-card-subtitle">{game.subtitle}</div>
-                  </div>
+                  <img 
+                    src={game.image} 
+                    alt={game.title} 
+                    className="game-card-direct-img" 
+                    loading="lazy"
+                    decoding="async"
+                  />
                 </div>
               ))}
             </div>
