@@ -700,7 +700,7 @@ export default function FinanceModal({ initialMode = 'deposit' }) {
                   <input 
                     type="text"
                     className="amount-input"
-                    style={{ fontSize: '13px', padding: '12px 14px', width: '100%', boxSizing: 'border-box' }}
+                    style={{ fontSize: '16px', padding: '12px 14px', width: '100%', boxSizing: 'border-box' }}
                     value={withdrawAddress}
                     onChange={e => setWithdrawAddress(e.target.value)}
                     placeholder={paymentMethod === 'usdt_trc20' ? 'Адрес кошелька TRC-20 (начинается с T...)' : 'Адрес кошелька TON (UQ... или EQ...)'}
