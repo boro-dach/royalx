@@ -1,0 +1,1 @@
+self.__REACT_LOADABLE_MANIFEST="{\"app/page.jsx -> ../App\":{\"id\":\"app/page.jsx -> ../App\",\"files\":[\"static/css/_app-pages-browser_src_App_jsx.css\",\"static/chunks/_app-pages-browser_src_App_jsx.js\"]}}"

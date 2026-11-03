@@ -50,14 +50,16 @@ function formatWebAppUrl(url) {
 function getWebAppUrlForTelegram() {
   let base = formatWebAppUrl(currentWebAppUrl);
   if (!base || base.includes('localhost') || base.includes('127.0.0.1')) {
-    if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+    if (process.env.RENDER_EXTERNAL_URL) {
+      base = formatWebAppUrl(process.env.RENDER_EXTERNAL_URL);
+    } else if (process.env.RAILWAY_PUBLIC_DOMAIN) {
       base = formatWebAppUrl(process.env.RAILWAY_PUBLIC_DOMAIN);
     } else if (process.env.WEBAPP_URL && !process.env.WEBAPP_URL.includes('localhost')) {
       base = formatWebAppUrl(process.env.WEBAPP_URL);
     }
   }
   if (!base) {
-    base = 'https://royalx-production.up.railway.app';
+    base = 'https://royalx-x7rb.onrender.com';
   }
   // Telegram Bot API strictly requires HTTPS links for inline keyboard WebApp buttons
   if (!base.startsWith('https://')) {
@@ -69,7 +71,7 @@ function getWebAppUrlForTelegram() {
   return base.includes('?') ? `${base}&v=${Date.now()}` : `${base}?v=${Date.now()}`;
 }
 
-let currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL || `http://localhost:${PORT}`);
+let currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL || 'https://royalx-x7rb.onrender.com');
 let telegramBot = null;
 const activeChatIds = new Set();
 app.use(express.json({ limit: '1mb' }));
@@ -3836,10 +3838,14 @@ function startTunnel() {
     );
 
     if (isCloud) {
-      if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+      if (process.env.RENDER_EXTERNAL_URL) {
+        currentWebAppUrl = formatWebAppUrl(process.env.RENDER_EXTERNAL_URL);
+      } else if (process.env.RAILWAY_PUBLIC_DOMAIN) {
         currentWebAppUrl = formatWebAppUrl(process.env.RAILWAY_PUBLIC_DOMAIN);
       } else if (process.env.WEBAPP_URL) {
         currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL);
+      } else {
+        currentWebAppUrl = 'https://royalx-x7rb.onrender.com';
       }
       console.log(`☁️ Cloud environment detected. Using URL: ${currentWebAppUrl}`);
       return resolve(currentWebAppUrl);
