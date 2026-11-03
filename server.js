@@ -7,6 +7,7 @@ import { spawn, execSync } from 'child_process';
 import fs from 'fs';
 import { verifyInitData, hashPassword, verifyPassword, createSession, validateSession, destroySession, authMiddleware, adminMiddleware } from './auth.js';
 import { getSupabaseClient, isSupabaseConfigured, toSnakeCase, toCamelCase } from './supabaseClient.js';
+import { EMOJI, ORDER_EMOJIS, tgEmoji } from './telegramEmojis.js';
 
 dotenv.config();
 
@@ -1310,6 +1311,8 @@ class DatabaseManager {
     if (this.data.users[id].isBanned === undefined) this.data.users[id].isBanned = false;
     if (this.data.users[id].agreedToTerms === undefined) this.data.users[id].agreedToTerms = false;
     if (this.data.users[id].isSubscribed === undefined) this.data.users[id].isSubscribed = false;
+    if (this.data.users[id].botBet === undefined) this.data.users[id].botBet = 0.00;
+    if (this.data.users[id].botThrows === undefined) this.data.users[id].botThrows = true;
     if (this.data.users[id].netProfit === undefined) {
       let net = 0;
       if (Array.isArray(this.data.users[id].history)) {
@@ -3979,6 +3982,234 @@ function startSshTunnel() {
   });
 }
 
+const WELCOME_BANNER_PATH = path.join(__dirname, 'public', 'welcome-banner.jpg');
+let cachedWelcomeBannerFileId = null;
+
+function formatMoneyDisplay(val) {
+  const num = Number(val) || 0;
+  if (Number.isInteger(num)) return String(num);
+  return Number(num.toFixed(2)).toString();
+}
+
+const GAME_CONFIG = {
+  dice: {
+    emoji: '🎲',
+    name: 'Кости',
+    outcomes: {
+      under: { label: 'Меньше (1-3)', mult: 1.95, check: v => v <= 3 },
+      over: { label: 'Больше (4-6)', mult: 1.95, check: v => v >= 4 },
+      even: { label: 'Чётное', mult: 1.95, check: v => v % 2 === 0 },
+      odd: { label: 'Нечётное', mult: 1.95, check: v => v % 2 !== 0 },
+      '1': { label: 'Точно 1', mult: 5.80, check: v => v === 1 },
+      '2': { label: 'Точно 2', mult: 5.80, check: v => v === 2 },
+      '3': { label: 'Точно 3', mult: 5.80, check: v => v === 3 },
+      '4': { label: 'Точно 4', mult: 5.80, check: v => v === 4 },
+      '5': { label: 'Точно 5', mult: 5.80, check: v => v === 5 },
+      '6': { label: 'Точно 6', mult: 5.80, check: v => v === 6 }
+    }
+  },
+  bowling: {
+    emoji: '🎳',
+    name: 'Боулинг',
+    outcomes: {
+      strike: { label: 'Страйк (все кегли)', mult: 4.00, check: v => v === 6 },
+      pins4: { label: 'Сбить 4+ кеглей', mult: 1.90, check: v => v >= 4 }
+    }
+  },
+  darts: {
+    emoji: '🎯',
+    name: 'Дартс',
+    outcomes: {
+      bullseye: { label: 'Яблочко (центр)', mult: 5.00, check: v => v === 6 },
+      hit: { label: 'Попадание в мишень', mult: 1.50, check: v => v >= 2 }
+    }
+  },
+  basketball: {
+    emoji: '🏀',
+    name: 'Баскетбол',
+    outcomes: {
+      score: { label: 'Попадание в кольцо', mult: 1.95, check: v => v >= 4 }
+    }
+  },
+  football: {
+    emoji: '⚽️',
+    name: 'Футбол',
+    outcomes: {
+      goal: { label: 'Гол в ворота', mult: 1.95, check: v => v >= 3 }
+    }
+  },
+  slots: {
+    emoji: '🎰',
+    name: 'Слоты',
+    outcomes: {
+      spin: {
+        label: 'Вращение барабана',
+        mult: 1.0,
+        check: v => v === 64 || [1, 22, 43].includes(v) || (v % 16 === 0 || v % 17 === 0)
+      }
+    }
+  }
+};
+
+function getMainMenuContent(user, userId, firstName) {
+  const name = firstName || user?.name || 'друг';
+  const balance = formatMoneyDisplay(user?.balance || 0);
+  const bet = formatMoneyDisplay(user?.botBet || 0);
+  const safeName = escapeHtml(name);
+  const webAppUrlWithBust = getWebAppUrlForTelegram();
+
+  const caption = 
+`<blockquote>${EMOJI.rocket} <b>Добро пожаловать, <a href="tg://user?id=${userId}">${safeName}</a></b></blockquote>
+
+${EMOJI.cash} <b>Для совершения игры тебе нужно выбрать ставку и желаемый исход!</b>
+
+• <b>Баланс</b> — ${balance} ${EMOJI.dollar}
+• <b>Установленная ставка</b> — ${bet} ${EMOJI.dollar}`;
+
+  const botThrows = user?.botThrows !== false;
+  const throwerText = botThrows ? '🤖 Броски делает бот' : '👤 Броски делает игрок';
+
+  const replyMarkup = {
+    inline_keyboard: [
+      // Row 1: WebApp button
+      [
+        {
+          text: '• WebApp › 🔥 Сделать ставку',
+          web_app: { url: webAppUrlWithBust }
+        }
+      ],
+      // Row 2: Location selector
+      [
+        {
+          text: '💬 В канале',
+          url: CHANNEL_URL
+        },
+        {
+          text: '🤖 В боте',
+          callback_data: 'menu_loc_bot'
+        }
+      ],
+      // Row 3: Thrower toggle
+      [
+        {
+          text: throwerText,
+          callback_data: 'menu_toggle_thrower'
+        }
+      ],
+      // Row 4: 6 games
+      [
+        { text: '🎲', callback_data: 'game_dice' },
+        { text: '🎳', callback_data: 'game_bowling' },
+        { text: '🎯', callback_data: 'game_darts' },
+        { text: '🏀', callback_data: 'game_basketball' },
+        { text: '⚽️', callback_data: 'game_football' },
+        { text: '🎰', callback_data: 'game_slots' }
+      ],
+      // Row 5: Telegram link
+      [
+        {
+          text: '✈️ Telegram',
+          url: CHANNEL_URL
+        }
+      ],
+      // Row 6: Modes and Deposit
+      [
+        {
+          text: '📍 Режимы',
+          callback_data: 'menu_modes'
+        },
+        {
+          text: '💳 Пополнить',
+          callback_data: 'menu_deposit'
+        }
+      ],
+      // Row 7: Play in chat
+      [
+        {
+          text: '💬 Играть в чате ↗',
+          url: CHANNEL_URL
+        }
+      ],
+      // Row 8: Change bet
+      [
+        {
+          text: '📝 Изменить ставку',
+          callback_data: 'menu_change_bet'
+        }
+      ]
+    ]
+  };
+
+  return { caption, replyMarkup };
+}
+
+async function sendWelcomeBanner(chatId, caption, replyMarkup) {
+  if (!telegramBot) return null;
+  const photoTarget = cachedWelcomeBannerFileId || (fs.existsSync(WELCOME_BANNER_PATH) ? WELCOME_BANNER_PATH : null);
+
+  if (photoTarget) {
+    try {
+      const sent = await telegramBot.sendPhoto(chatId, photoTarget, {
+        caption,
+        parse_mode: 'HTML',
+        reply_markup: replyMarkup
+      });
+      if (sent && sent.photo && sent.photo.length > 0) {
+        cachedWelcomeBannerFileId = sent.photo[sent.photo.length - 1].file_id;
+      }
+      return sent;
+    } catch (err) {
+      console.warn('[TelegramBot] sendPhoto failed, retrying local or sendMessage:', err.message);
+      if (cachedWelcomeBannerFileId && fs.existsSync(WELCOME_BANNER_PATH)) {
+        cachedWelcomeBannerFileId = null;
+        try {
+          const sent = await telegramBot.sendPhoto(chatId, WELCOME_BANNER_PATH, {
+            caption,
+            parse_mode: 'HTML',
+            reply_markup: replyMarkup
+          });
+          if (sent && sent.photo && sent.photo.length > 0) {
+            cachedWelcomeBannerFileId = sent.photo[sent.photo.length - 1].file_id;
+          }
+          return sent;
+        } catch (e2) {
+          console.warn('[TelegramBot] Local photo send error:', e2.message);
+        }
+      }
+    }
+  }
+
+  return telegramBot.sendMessage(chatId, caption, {
+    parse_mode: 'HTML',
+    reply_markup: replyMarkup
+  }).catch(err => {
+    console.error('[TelegramBot] Error sending welcome message:', err.message);
+  });
+}
+
+async function editWelcomeMessage(chatId, messageId, caption, replyMarkup) {
+  if (!telegramBot) return null;
+  try {
+    return await telegramBot.editMessageCaption(caption, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'HTML',
+      reply_markup: replyMarkup
+    });
+  } catch (err) {
+    try {
+      return await telegramBot.editMessageText(caption, {
+        chat_id: chatId,
+        message_id: messageId,
+        parse_mode: 'HTML',
+        reply_markup: replyMarkup
+      });
+    } catch (e2) {
+      return sendWelcomeBanner(chatId, caption, replyMarkup);
+    }
+  }
+}
+
 function initTelegramBot(token) {
   try {
     telegramBot = new TelegramBot(token, { polling: true });
@@ -4029,7 +4260,7 @@ function initTelegramBot(token) {
         };
 
         const subText = 
-`<b><tg-emoji emoji-id="5242503662080663792">💰</tg-emoji> Добро пожаловать в Royal X!</b>
+`<b>${EMOJI.money} Добро пожаловать в Royal X!</b>
 
 ⚠️ <b>Обязательная подписка:</b>
 Для доступа к играм, бонусам и выводу средств необходимо подписаться на наш официальный Telegram-канал:
@@ -4045,40 +4276,11 @@ function initTelegramBot(token) {
         });
       }
 
-      const welcomeText = 
-`<tg-emoji emoji-id="5242503662080663792">💰</tg-emoji> Добро пожаловать в Royal X
-
-Наш канал - @${CHANNEL_USERNAME}
-
-<tg-emoji emoji-id="5240422475547846797">🎲</tg-emoji> Приятной игры!`;
-
-      const webAppUrlWithBust = getWebAppUrlForTelegram();
-
-      const replyMarkup = {
-        inline_keyboard: [
-          [
-            {
-              text: 'Играть 🚀',
-              web_app: { url: webAppUrlWithBust }
-            }
-          ],
-          [
-            {
-              text: '📸 Сдать пруф',
-              callback_data: 'send_proof_info'
-            }
-          ]
-        ]
-      };
-
+      const user = db.getUser(userId, firstName);
       updateBotMenuButton(chatId);
 
-      telegramBot.sendMessage(chatId, welcomeText, {
-        parse_mode: 'HTML',
-        reply_markup: replyMarkup
-      }).catch(err => {
-        console.error('Error sending start message:', err.message);
-      });
+      const { caption, replyMarkup } = getMainMenuContent(user, userId, firstName);
+      return sendWelcomeBanner(chatId, caption, replyMarkup);
     });
 
     telegramBot.onText(/\/setgroup(?:\s+(.+))?/, async (msg, match) => {
@@ -4270,46 +4472,553 @@ function initTelegramBot(token) {
               show_alert: false
             }).catch(() => {});
 
-            const welcomeText = 
-`<tg-emoji emoji-id="5242503662080663792">💰</tg-emoji> Добро пожаловать в Royal X
-
-Наш канал - @${CHANNEL_USERNAME}
-
-<tg-emoji emoji-id="5240422475547846797">🎲</tg-emoji> Приятной игры!`;
-
-            const webAppUrlWithBust = getWebAppUrlForTelegram();
-
-            const replyMarkup = {
-              inline_keyboard: [
-                [
-                  {
-                    text: 'Играть 🚀',
-                    web_app: { url: webAppUrlWithBust }
-                  }
-                ],
-                [
-                  {
-                    text: '📸 Сдать пруф',
-                    callback_data: 'send_proof_info'
-                  }
-                ]
-              ]
-            };
-
+            const user = db.getUser(userId, query.from.first_name);
             updateBotMenuButton(chatId);
 
-            return telegramBot.sendMessage(chatId, welcomeText, {
-              parse_mode: 'HTML',
-              reply_markup: replyMarkup
-            }).catch(err => {
-              console.error('Error sending start message after sub check:', err.message);
-            });
+            const { caption, replyMarkup } = getMainMenuContent(user, userId, query.from.first_name);
+            return sendWelcomeBanner(chatId, caption, replyMarkup);
           } else {
             return telegramBot.answerCallbackQuery(query.id, {
               text: `❌ Вы ещё не подписались на канал @${CHANNEL_USERNAME}! Пожалуйста, подпишитесь и повторите проверку.`,
               show_alert: true
             }).catch(() => {});
           }
+        }
+
+        // Return to main menu
+        if (data === 'menu_back_main') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          const { caption, replyMarkup } = getMainMenuContent(user, userId, query.from.first_name);
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, caption, replyMarkup);
+        }
+
+        // Location selector: in bot
+        if (data === 'menu_loc_bot') {
+          await telegramBot.answerCallbackQuery(query.id, {
+            text: '🤖 Выбран режим игры в боте!',
+            show_alert: false
+          }).catch(() => {});
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          user.gameTarget = 'bot';
+          db.save();
+          const { caption, replyMarkup } = getMainMenuContent(user, userId, query.from.first_name);
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, caption, replyMarkup);
+        }
+
+        // Toggle thrower: bot vs player
+        if (data === 'menu_toggle_thrower') {
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          user.botThrows = !(user.botThrows !== false);
+          db.save();
+          const alertText = user.botThrows ? '🤖 Теперь броски делает бот!' : '👤 Теперь броски делаете вы (отправляйте эмодзи в чат)!';
+          await telegramBot.answerCallbackQuery(query.id, {
+            text: alertText,
+            show_alert: false
+          }).catch(() => {});
+          const { caption, replyMarkup } = getMainMenuContent(user, userId, query.from.first_name);
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, caption, replyMarkup);
+        }
+
+        // Change bet menu
+        if (data === 'menu_change_bet') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          const currentBet = formatMoneyDisplay(user.botBet || 0);
+          const balance = formatMoneyDisplay(user.balance);
+
+          const betCaption = 
+`<blockquote>${EMOJI.edit} <b>Изменение ставки</b></blockquote>
+
+${EMOJI.money} <b>Текущая ставка:</b> <code>${currentBet}</code> ${EMOJI.dollar}
+• <b>Баланс:</b> <code>${balance}</code> ${EMOJI.dollar}
+
+<i>Выберите размер ставки кнопками ниже или отправьте любую сумму в чат:</i>`;
+
+          const betMarkup = {
+            inline_keyboard: [
+              [
+                { text: '0.15 💲', callback_data: 'set_bet_0.15' },
+                { text: '0.50 💲', callback_data: 'set_bet_0.50' },
+                { text: '1.00 💲', callback_data: 'set_bet_1' }
+              ],
+              [
+                { text: '2.00 💲', callback_data: 'set_bet_2' },
+                { text: '5.00 💲', callback_data: 'set_bet_5' },
+                { text: '10.00 💲', callback_data: 'set_bet_10' }
+              ],
+              [
+                { text: '25.00 💲', callback_data: 'set_bet_25' },
+                { text: '50.00 💲', callback_data: 'set_bet_50' },
+                { text: '100.00 💲', callback_data: 'set_bet_100' }
+              ],
+              [
+                { text: '250.00 💲', callback_data: 'set_bet_250' },
+                { text: '500.00 💲', callback_data: 'set_bet_500' },
+                { text: '1000.00 💲', callback_data: 'set_bet_1000' }
+              ],
+              [
+                { text: '◀️ Назад в меню', callback_data: 'menu_back_main' }
+              ]
+            ]
+          };
+
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, betCaption, betMarkup);
+        }
+
+        // Set preset bet
+        if (data.startsWith('set_bet_')) {
+          const amtStr = data.replace('set_bet_', '');
+          const amt = parseFloat(amtStr);
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          if (!isNaN(amt) && amt >= 0) {
+            user.botBet = amt;
+            db.save();
+            await telegramBot.answerCallbackQuery(query.id, {
+              text: `✅ Ставка установлена: ${formatMoneyDisplay(amt)} 💲`,
+              show_alert: false
+            }).catch(() => {});
+          }
+          const { caption, replyMarkup } = getMainMenuContent(user, userId, query.from.first_name);
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, caption, replyMarkup);
+        }
+
+        // Modes info
+        if (data === 'menu_modes') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const modesCaption = 
+`<blockquote>${EMOJI.pin} <b>Игровые режимы и коэффициенты</b></blockquote>
+
+🎲 <b>Кости:</b>
+• Больше (4, 5, 6) — <b>x1.95</b>
+• Меньше (1, 2, 3) — <b>x1.95</b>
+• Чётное / Нечётное — <b>x1.95</b>
+• Точное число (1-6) — <b>x5.80</b>
+
+🎳 <b>Боулинг:</b>
+• Страйк (все 6 кеглей) — <b>x4.00</b>
+• 4 или 5 кеглей — <b>x1.90</b>
+
+🎯 <b>Дартс:</b>
+• Яблочко (центр мишени) — <b>x5.00</b>
+• Попадание в мишень — <b>x1.50</b>
+
+🏀 <b>Баскетбол:</b>
+• Чистый гол — <b>x1.95</b>
+
+⚽️ <b>Футбол:</b>
+• Гол в ворота — <b>x1.95</b>
+
+🎰 <b>Слоты:</b>
+• 777 (Джекпот) — <b>x25.00</b>
+• Три одинаковых символа — <b>x5.00</b>
+• Две комбинации — <b>x1.80</b>`;
+
+          const modesMarkup = {
+            inline_keyboard: [
+              [
+                { text: '◀️ Назад в главное меню', callback_data: 'menu_back_main' }
+              ]
+            ]
+          };
+
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, modesCaption, modesMarkup);
+        }
+
+        // Deposit menu
+        if (data === 'menu_deposit') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          const webAppUrlWithBust = getWebAppUrlForTelegram();
+
+          const depCaption = 
+`<blockquote>${EMOJI.wallet} <b>Пополнение баланса</b></blockquote>
+
+${EMOJI.cash} <b>Ваш ID:</b> <code>${userId}</code>
+• <b>Текущий баланс:</b> <code>${formatMoneyDisplay(user.balance)}</code> ${EMOJI.dollar}
+
+<i>Пополняйте баланс удобным для вас способом через WebApp или платежные боты:</i>`;
+
+          const depMarkup = {
+            inline_keyboard: [
+              [
+                {
+                  text: '• WebApp › 💳 Пополнить в приложении ↗',
+                  web_app: { url: webAppUrlWithBust }
+                }
+              ],
+              [
+                {
+                  text: '🤖 CryptoBot',
+                  url: 'https://t.me/CryptoBot'
+                },
+                {
+                  text: '🚀 xRocket',
+                  url: XROCKET_PAY_URL
+                }
+              ],
+              [
+                {
+                  text: '◀️ Назад в главное меню',
+                  callback_data: 'menu_back_main'
+                }
+              ]
+            ]
+          };
+
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, depCaption, depMarkup);
+        }
+
+        // Game 1: Dice
+        if (data === 'game_dice') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          const bet = formatMoneyDisplay(user.botBet || 0);
+          const bal = formatMoneyDisplay(user.balance);
+
+          const caption = 
+`<blockquote>🎲 <b>Игра «Кости»</b></blockquote>
+
+${EMOJI.money} <b>Установленная ставка:</b> <code>${bet}</code> ${EMOJI.dollar}
+• <b>Баланс:</b> <code>${bal}</code> ${EMOJI.dollar}
+
+<i>Выберите желаемый исход для броска:</i>`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                { text: '📉 Меньше (1-3) x1.95', callback_data: 'roll_dice_under' },
+                { text: '📈 Больше (4-6) x1.95', callback_data: 'roll_dice_over' }
+              ],
+              [
+                { text: '🔢 Чёт x1.95', callback_data: 'roll_dice_even' },
+                { text: '🔢 Нечёт x1.95', callback_data: 'roll_dice_odd' }
+              ],
+              [
+                { text: '1️⃣ x5.8', callback_data: 'roll_dice_1' },
+                { text: '2️⃣ x5.8', callback_data: 'roll_dice_2' },
+                { text: '3️⃣ x5.8', callback_data: 'roll_dice_3' }
+              ],
+              [
+                { text: '4️⃣ x5.8', callback_data: 'roll_dice_4' },
+                { text: '5️⃣ x5.8', callback_data: 'roll_dice_5' },
+                { text: '6️⃣ x5.8', callback_data: 'roll_dice_6' }
+              ],
+              [
+                { text: '📝 Изменить ставку', callback_data: 'menu_change_bet' },
+                { text: '◀️ В меню', callback_data: 'menu_back_main' }
+              ]
+            ]
+          };
+
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, caption, markup);
+        }
+
+        // Game 2: Bowling
+        if (data === 'game_bowling') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          const bet = formatMoneyDisplay(user.botBet || 0);
+          const bal = formatMoneyDisplay(user.balance);
+
+          const caption = 
+`<blockquote>🎳 <b>Игра «Боулинг»</b></blockquote>
+
+${EMOJI.money} <b>Установленная ставка:</b> <code>${bet}</code> ${EMOJI.dollar}
+• <b>Баланс:</b> <code>${bal}</code> ${EMOJI.dollar}
+
+<i>Выберите желаемый исход:</i>`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                { text: '🎳 Страйк (все кегли) x4.00', callback_data: 'roll_bowling_strike' }
+              ],
+              [
+                { text: '🎳 Сбить 4+ кеглей x1.90', callback_data: 'roll_bowling_pins4' }
+              ],
+              [
+                { text: '📝 Изменить ставку', callback_data: 'menu_change_bet' },
+                { text: '◀️ В меню', callback_data: 'menu_back_main' }
+              ]
+            ]
+          };
+
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, caption, markup);
+        }
+
+        // Game 3: Darts
+        if (data === 'game_darts') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          const bet = formatMoneyDisplay(user.botBet || 0);
+          const bal = formatMoneyDisplay(user.balance);
+
+          const caption = 
+`<blockquote>🎯 <b>Игра «Дартс»</b></blockquote>
+
+${EMOJI.money} <b>Установленная ставка:</b> <code>${bet}</code> ${EMOJI.dollar}
+• <b>Баланс:</b> <code>${bal}</code> ${EMOJI.dollar}
+
+<i>Выберите желаемый исход:</i>`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                { text: '🎯 Яблочко (центр) x5.00', callback_data: 'roll_darts_bullseye' }
+              ],
+              [
+                { text: '🎯 Попадание в мишень x1.50', callback_data: 'roll_darts_hit' }
+              ],
+              [
+                { text: '📝 Изменить ставку', callback_data: 'menu_change_bet' },
+                { text: '◀️ В меню', callback_data: 'menu_back_main' }
+              ]
+            ]
+          };
+
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, caption, markup);
+        }
+
+        // Game 4: Basketball
+        if (data === 'game_basketball') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          const bet = formatMoneyDisplay(user.botBet || 0);
+          const bal = formatMoneyDisplay(user.balance);
+
+          const caption = 
+`<blockquote>🏀 <b>Игра «Баскетбол»</b></blockquote>
+
+${EMOJI.money} <b>Установленная ставка:</b> <code>${bet}</code> ${EMOJI.dollar}
+• <b>Баланс:</b> <code>${bal}</code> ${EMOJI.dollar}
+
+<i>Выберите желаемый исход:</i>`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                { text: '🏀 Попадание в кольцо (Гол) x1.95', callback_data: 'roll_basketball_score' }
+              ],
+              [
+                { text: '📝 Изменить ставку', callback_data: 'menu_change_bet' },
+                { text: '◀️ В меню', callback_data: 'menu_back_main' }
+              ]
+            ]
+          };
+
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, caption, markup);
+        }
+
+        // Game 5: Football
+        if (data === 'game_football') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          const bet = formatMoneyDisplay(user.botBet || 0);
+          const bal = formatMoneyDisplay(user.balance);
+
+          const caption = 
+`<blockquote>⚽️ <b>Игра «Футбол»</b></blockquote>
+
+${EMOJI.money} <b>Установленная ставка:</b> <code>${bet}</code> ${EMOJI.dollar}
+• <b>Баланс:</b> <code>${bal}</code> ${EMOJI.dollar}
+
+<i>Выберите желаемый исход:</i>`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                { text: '⚽️ Гол в ворота x1.95', callback_data: 'roll_football_goal' }
+              ],
+              [
+                { text: '📝 Изменить ставку', callback_data: 'menu_change_bet' },
+                { text: '◀️ В меню', callback_data: 'menu_back_main' }
+              ]
+            ]
+          };
+
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, caption, markup);
+        }
+
+        // Game 6: Slots
+        if (data === 'game_slots') {
+          await telegramBot.answerCallbackQuery(query.id).catch(() => {});
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          const bet = formatMoneyDisplay(user.botBet || 0);
+          const bal = formatMoneyDisplay(user.balance);
+
+          const caption = 
+`<blockquote>🎰 <b>Игра «Слоты»</b></blockquote>
+
+${EMOJI.money} <b>Установленная ставка:</b> <code>${bet}</code> ${EMOJI.dollar}
+• <b>Баланс:</b> <code>${bal}</code> ${EMOJI.dollar}
+
+<i>Нажмите кнопку ниже, чтобы запустить вращение барабана:</i>`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                { text: '🎰 Крутить барабан!', callback_data: 'roll_slots_spin' }
+              ],
+              [
+                { text: '📝 Изменить ставку', callback_data: 'menu_change_bet' },
+                { text: '◀️ В меню', callback_data: 'menu_back_main' }
+              ]
+            ]
+          };
+
+          return editWelcomeMessage(query.message.chat.id, query.message.message_id, caption, markup);
+        }
+
+        // Execute game roll
+        if (data.startsWith('roll_')) {
+          const parts = data.split('_');
+          const game = parts[1];
+          const outcomeKey = parts.slice(2).join('_');
+          const cfg = GAME_CONFIG[game];
+          if (!cfg) return;
+
+          const outcomeInfo = cfg.outcomes[outcomeKey];
+          if (!outcomeInfo) return;
+
+          const userId = String(query.from.id);
+          const user = db.getUser(userId, query.from.first_name);
+          const bet = Math.max(0, Number(user.botBet) || 0);
+
+          if (bet <= 0) {
+            return telegramBot.answerCallbackQuery(query.id, {
+              text: '⚠️ Сначала установите ставку больше 0 💲 в меню «Изменить ставку»!',
+              show_alert: true
+            }).catch(() => {});
+          }
+
+          if (user.balance < bet) {
+            return telegramBot.answerCallbackQuery(query.id, {
+              text: `❌ Недостаточно средств на балансе! Ваш баланс: ${formatMoneyDisplay(user.balance)} 💲`,
+              show_alert: true
+            }).catch(() => {});
+          }
+
+          const chatId = query.message?.chat?.id || query.from.id;
+
+          if (user.botThrows === false) {
+            user.pendingPlayerThrow = {
+              game,
+              outcome: outcomeKey,
+              bet,
+              time: Date.now()
+            };
+            db.save();
+            await telegramBot.answerCallbackQuery(query.id, { text: '👤 Ваш ход! Отправьте эмодзи в чат' }).catch(() => {});
+            return telegramBot.sendMessage(chatId, `👤 <b>Ваш ход!</b>\n\nОтправьте эмодзи <b>${cfg.emoji}</b> в этот чат, чтобы сделать бросок!\n\n• <b>Выбранный исход:</b> ${outcomeInfo.label}\n• <b>Ставка:</b> <code>${formatMoneyDisplay(bet)}</code> ${EMOJI.dollar}`, { parse_mode: 'HTML' });
+          }
+
+          await telegramBot.answerCallbackQuery(query.id, { text: `🎲 Бросок в игре «${cfg.name}»...` }).catch(() => {});
+
+          user.balance = Math.max(0, Number((user.balance - bet).toFixed(2)));
+          db.save();
+
+          try {
+            const diceMsg = await telegramBot.sendDice(chatId, { emoji: cfg.emoji });
+            await new Promise(r => setTimeout(r, 3500));
+
+            const val = diceMsg?.dice ? diceMsg.dice.value : 0;
+            let isWin = false;
+            let mult = outcomeInfo.mult;
+
+            if (game === 'slots') {
+              if (val === 64) {
+                isWin = true;
+                mult = 25.0;
+              } else if ([1, 22, 43].includes(val)) {
+                isWin = true;
+                mult = 5.0;
+              } else if (val % 16 === 0 || val === 32 || val === 48) {
+                isWin = true;
+                mult = 1.8;
+              } else {
+                isWin = false;
+              }
+            } else {
+              isWin = outcomeInfo.check(val);
+            }
+
+            if (!user.stats) user.stats = {};
+            user.stats.gamesPlayed = (user.stats.gamesPlayed || 0) + 1;
+
+            let resultText = '';
+            if (isWin) {
+              const winAmount = Number((bet * mult).toFixed(2));
+              user.balance = Number((user.balance + winAmount).toFixed(2));
+              user.stats.gamesWon = (user.stats.gamesWon || 0) + 1;
+              user.stats.totalWon = Number(((user.stats.totalWon || 0) + winAmount).toFixed(2));
+
+              resultText = 
+`🎉 <b>ПОБЕДА!</b>
+
+${EMOJI.sparkles} <b>Результат:</b> <code>${val}</code>
+• <b>Исход:</b> ${outcomeInfo.label} (<b>x${mult.toFixed(2)}</b>)
+• <b>Выигрыш:</b> +<b>${formatMoneyDisplay(winAmount)}</b> ${EMOJI.dollar}
+• <b>Баланс:</b> <b>${formatMoneyDisplay(user.balance)}</b> ${EMOJI.dollar}`;
+            } else {
+              user.stats.gamesLost = (user.stats.gamesLost || 0) + 1;
+              user.stats.totalLost = Number(((user.stats.totalLost || 0) + bet).toFixed(2));
+
+              resultText = 
+`💔 <b>НЕ ПОВЕЗЛО</b>
+
+${EMOJI.bomb} <b>Результат:</b> <code>${val}</code>
+• <b>Исход:</b> ${outcomeInfo.label}
+• <b>Проигрыш:</b> -<b>${formatMoneyDisplay(bet)}</b> ${EMOJI.dollar}
+• <b>Баланс:</b> <b>${formatMoneyDisplay(user.balance)}</b> ${EMOJI.dollar}`;
+            }
+
+            if (!Array.isArray(user.history)) user.history = [];
+            user.history.unshift({
+              id: `bot_game_${Date.now()}`,
+              type: 'game',
+              game: cfg.name,
+              amount: isWin ? Number((bet * (mult - 1)).toFixed(2)) : -bet,
+              isWin,
+              date: new Date().toISOString()
+            });
+            if (user.history.length > 50) user.history.length = 50;
+
+            db.save();
+
+            const resultMarkup = {
+              inline_keyboard: [
+                [
+                  { text: `🔄 Повторить (${cfg.name})`, callback_data: `roll_${game}_${outcomeKey}` },
+                  { text: `🎲 Другой исход`, callback_data: `game_${game}` }
+                ],
+                [
+                  { text: `📝 Изменить ставку`, callback_data: 'menu_change_bet' },
+                  { text: `🏠 Главное меню`, callback_data: 'menu_back_main' }
+                ]
+              ]
+            };
+
+            return telegramBot.sendMessage(chatId, resultText, {
+              parse_mode: 'HTML',
+              reply_markup: resultMarkup
+            });
+          } catch (err) {
+            console.error(`[DiceGame] Error running roll for ${game}:`, err.message);
+          }
+          return;
         }
 
         // Info button to send proof
@@ -4442,6 +5151,144 @@ function initTelegramBot(token) {
         }
       } catch (err) {
         console.error('[CallbackQuery] Error:', err.message);
+      }
+    });
+
+    // Handle messages (e.g. player dice rolls or manual bet amounts)
+    telegramBot.on('message', async (msg) => {
+      try {
+        if (!msg || !msg.from) return;
+        const chatId = msg.chat.id;
+        const isPrivate = msg.chat.type === 'private';
+        const userId = String(msg.from.id);
+
+        // Check if player threw a dice for pending throw
+        if (msg.dice && isPrivate) {
+          const user = db.getUser(userId, msg.from.first_name);
+          if (user.pendingPlayerThrow) {
+            const pending = user.pendingPlayerThrow;
+            const cfg = GAME_CONFIG[pending.game];
+            if (cfg && msg.dice.emoji === cfg.emoji) {
+              user.pendingPlayerThrow = null;
+              const bet = pending.bet;
+              if (user.balance < bet) {
+                db.save();
+                return telegramBot.sendMessage(chatId, `❌ Недостаточно средств для ставки ${formatMoneyDisplay(bet)} 💲!`, { parse_mode: 'HTML' });
+              }
+              user.balance = Math.max(0, Number((user.balance - bet).toFixed(2)));
+              db.save();
+
+              // Wait for dice animation to complete
+              await new Promise(r => setTimeout(r, 3500));
+
+              const outcomeInfo = cfg.outcomes[pending.outcome];
+              const val = msg.dice.value;
+              let isWin = false;
+              let mult = outcomeInfo ? outcomeInfo.mult : 1.95;
+
+              if (pending.game === 'slots') {
+                if (val === 64) {
+                  isWin = true;
+                  mult = 25.0;
+                } else if ([1, 22, 43].includes(val)) {
+                  isWin = true;
+                  mult = 5.0;
+                } else if (val % 16 === 0 || val === 32 || val === 48) {
+                  isWin = true;
+                  mult = 1.8;
+                } else {
+                  isWin = false;
+                }
+              } else if (outcomeInfo) {
+                isWin = outcomeInfo.check(val);
+              }
+
+              if (!user.stats) user.stats = {};
+              user.stats.gamesPlayed = (user.stats.gamesPlayed || 0) + 1;
+
+              let resText = '';
+              if (isWin) {
+                const winAmount = Number((bet * mult).toFixed(2));
+                user.balance = Number((user.balance + winAmount).toFixed(2));
+                user.stats.gamesWon = (user.stats.gamesWon || 0) + 1;
+                user.stats.totalWon = Number(((user.stats.totalWon || 0) + winAmount).toFixed(2));
+
+                resText = 
+`🎉 <b>ПОБЕДА!</b>
+
+${EMOJI.sparkles} <b>Ваш бросок:</b> <code>${val}</code>
+• <b>Исход:</b> ${outcomeInfo?.label || ''} (<b>x${mult.toFixed(2)}</b>)
+• <b>Выигрыш:</b> +<b>${formatMoneyDisplay(winAmount)}</b> ${EMOJI.dollar}
+• <b>Баланс:</b> <b>${formatMoneyDisplay(user.balance)}</b> ${EMOJI.dollar}`;
+              } else {
+                user.stats.gamesLost = (user.stats.gamesLost || 0) + 1;
+                user.stats.totalLost = Number(((user.stats.totalLost || 0) + bet).toFixed(2));
+
+                resText = 
+`💔 <b>НЕ ПОВЕЗЛО</b>
+
+${EMOJI.bomb} <b>Ваш бросок:</b> <code>${val}</code>
+• <b>Исход:</b> ${outcomeInfo?.label || ''}
+• <b>Проигрыш:</b> -<b>${formatMoneyDisplay(bet)}</b> ${EMOJI.dollar}
+• <b>Баланс:</b> <b>${formatMoneyDisplay(user.balance)}</b> ${EMOJI.dollar}`;
+              }
+
+              if (!Array.isArray(user.history)) user.history = [];
+              user.history.unshift({
+                id: `bot_game_${Date.now()}`,
+                type: 'game',
+                game: cfg.name,
+                amount: isWin ? Number((bet * (mult - 1)).toFixed(2)) : -bet,
+                isWin,
+                date: new Date().toISOString()
+              });
+              if (user.history.length > 50) user.history.length = 50;
+
+              db.save();
+
+              const resMarkup = {
+                inline_keyboard: [
+                  [
+                    { text: `🔄 Повторить (${cfg.name})`, callback_data: `roll_${pending.game}_${pending.outcome}` },
+                    { text: `🎲 Другой исход`, callback_data: `game_${pending.game}` }
+                  ],
+                  [
+                    { text: `📝 Изменить ставку`, callback_data: 'menu_change_bet' },
+                    { text: `🏠 Главное меню`, callback_data: 'menu_back_main' }
+                  ]
+                ]
+              };
+
+              return telegramBot.sendMessage(chatId, resText, {
+                parse_mode: 'HTML',
+                reply_markup: resMarkup
+              });
+            }
+          }
+        }
+
+        // Check if user entered a number in chat to set their bet
+        if (msg.text && isPrivate && !msg.text.startsWith('/')) {
+          const trimmed = msg.text.trim().replace(',', '.');
+          const num = parseFloat(trimmed);
+          if (!isNaN(num) && /^\d+(?:\.\d{1,2})?$/.test(trimmed) && num >= 0.01 && num <= 50000) {
+            const user = db.getUser(userId, msg.from.first_name);
+            user.botBet = num;
+            db.save();
+            return telegramBot.sendMessage(chatId, `✅ <b>Ставка установлена:</b> <code>${formatMoneyDisplay(num)}</code> ${EMOJI.dollar}\n\n<i>Откройте меню или нажмите кнопку игры для совершения броска!</i>`, {
+              parse_mode: 'HTML',
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    { text: '🏠 В главное меню', callback_data: 'menu_back_main' }
+                  ]
+                ]
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[Bot Message Handler] Error:', err.message);
       }
     });
 
