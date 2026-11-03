@@ -430,5 +430,56 @@ export function Gift3DIcon({ size = 32 }) {
   );
 }
 
+export function Wheel3DIcon({ size = 48 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <defs>
+        <radialGradient id="wheelRim" cx="50%" cy="50%" r="50%">
+          <stop offset="70%" stopColor="#2c1a06" />
+          <stop offset="100%" stopColor="#140a02" />
+        </radialGradient>
+        <linearGradient id="goldEdge" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffe27a" />
+          <stop offset="50%" stopColor="#d4af37" />
+          <stop offset="100%" stopColor="#997b1a" />
+        </linearGradient>
+        <linearGradient id="wheelRed" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ff4d4d" />
+          <stop offset="100%" stopColor="#b31b1b" />
+        </linearGradient>
+      </defs>
+      {/* Stand base */}
+      <path d="M14 43L20 37H28L34 43H14Z" fill="#1b1d24" stroke="#333845" strokeWidth="1.5" strokeLinejoin="round" />
+      <rect x="22" y="32" width="4" height="6" fill="#2d323f" />
+      {/* Outer gold rim */}
+      <circle cx="24" cy="20" r="17" fill="url(#wheelRim)" stroke="url(#goldEdge)" strokeWidth="2.5" />
+      {/* Wheel inner segments */}
+      <circle cx="24" cy="20" r="14.5" fill="#f8f9fc" />
+      {/* Alternating Red / Yellow / White slices */}
+      <path d="M24 20L24 5.5A14.5 14.5 0 0 1 34.25 9.75Z" fill="url(#wheelRed)" />
+      <path d="M24 20L38.5 20A14.5 14.5 0 0 1 34.25 30.25Z" fill="url(#wheelRed)" />
+      <path d="M24 20L24 34.5A14.5 14.5 0 0 1 13.75 30.25Z" fill="url(#wheelRed)" />
+      <path d="M24 20L9.5 20A14.5 14.5 0 0 1 13.75 9.75Z" fill="url(#wheelRed)" />
+      {/* Golden studs */}
+      <circle cx="24" cy="20" r="5" fill="url(#goldEdge)" />
+      <circle cx="24" cy="20" r="2.5" fill="#ffffff" />
+      {/* Top pointer / flapper */}
+      <path d="M24 7L21.5 3H26.5L24 7Z" fill="#ffd700" stroke="#997b1a" strokeWidth="0.8" />
+    </svg>
+  );
+}
 
-
+export function FireBadgeIcon({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path 
+        d="M12 2C9.5 6 6 8.5 6 13C6 16.31 8.69 19 12 19C15.31 19 18 16.31 18 13C18 10 16 7 14 5C14 7 13 8 12 8C11 8 10 7 10 5.5C10 4 11 3 12 2Z" 
+        fill="#ff6b00" 
+      />
+      <path 
+        d="M12 9C10.5 11 9.5 12.5 9.5 14C9.5 15.38 10.62 16.5 12 16.5C13.38 16.5 14.5 15.38 14.5 14C14.5 12.8 13.5 11.5 12 9Z" 
+        fill="#ffd000" 
+      />
+    </svg>
+  );
+}

@@ -218,7 +218,7 @@ export function authMiddleware(
     }
 
     // 4. In development environment, allow access with dev user fallback
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV === 'development') {
       const devId = String(req.query?.userId || req.body?.userId || 'dev_admin');
       const user = db.getUser(devId, 'Dev Admin');
       req.userId = devId;
@@ -249,7 +249,7 @@ export function adminMiddleware(db) {
     }
 
     // In development environment, allow admin access for everyone (strictly blocked in production)
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV === 'development') {
       req.adminId = String(req.userId || 'dev_admin');
       req.isAdmin = true;
       return next();

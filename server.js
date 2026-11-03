@@ -772,10 +772,6 @@ class DatabaseManager {
   }
 
   isAdmin(userId) {
-    // In development environment, allow admin access for testing and inspection
-    if (process.env.NODE_ENV !== 'production') {
-      return true;
-    }
     const id = String(userId || '').trim();
     if (!id) return false;
     if (id === SUPERADMIN_ID || DEFAULT_ADMINS.includes(id)) return true;
