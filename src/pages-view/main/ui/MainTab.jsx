@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '@/context/AppContext';
-import { SearchIcon, CloseIcon, ChevronRightIcon, Wheel3DIcon } from '@/shared/ui/Icons';
+import { SearchIcon, CloseIcon, ChevronRightIcon } from '@/shared/ui/Icons';
 
 export default function MainTab() {
   const { setActiveGame, setActiveTab, showToast } = useApp();
@@ -165,37 +165,7 @@ export default function MainTab() {
         </div>
       ) : (
         <>
-          {/* 2. Wheel of Bonuses Banner */}
-          <div 
-            className="bonus-banner-card"
-            onClick={() => setActiveTab && setActiveTab('earn')}
-            role="button"
-            tabIndex={0}
-          >
-            <div className="bonus-banner-left">
-              <div className="bonus-banner-icon-box">
-                <Wheel3DIcon size={44} />
-              </div>
-              <div className="bonus-banner-info">
-                <div className="bonus-banner-title">Колесо бонусов</div>
-                <div className="bonus-banner-desc">
-                  Добавь @RoyalX_Win в имя — крути раз в 6 часов, приз до 10$
-                </div>
-              </div>
-            </div>
-            <button 
-              type="button" 
-              className="bonus-banner-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                if (setActiveTab) setActiveTab('earn');
-              }}
-            >
-              Приписка
-            </button>
-          </div>
-
-          {/* 3. "🔥 Популярные игры за 24 часа" */}
+          {/* 2. "🔥 Популярные игры за 24 часа" */}
           <section className="home-section">
             <div className="section-header-title">
               <span className="section-emoji">🔥</span> Популярные игры за 24 часа

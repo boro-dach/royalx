@@ -7,6 +7,10 @@ node_modules/
 .next/
 dist-ssr/
 dist/cache/
+dist/server/
+dist/static/
+dist/trace
+dist/types/
 build/
 *.local
 
