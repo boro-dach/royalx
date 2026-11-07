@@ -2020,9 +2020,7 @@ app.post('/api/games/emoji-roll', (req, res) => {
 
   user.balance = Math.max(0, parseFloat((user.balance - bet).toFixed(2)));
 
-  let maxVal = 6;
-  if (game === 'basketball' || game === 'football') maxVal = 5;
-  if (game === 'slots') maxVal = 64;
+  const maxVal = cfg.maxVal || 6;
 
   let val = Math.floor(Math.random() * maxVal) + 1;
 
@@ -4393,52 +4391,68 @@ const GAME_CONFIG = {
   dice: {
     emoji: '🎲',
     name: 'Кости',
+    maxVal: 6,
     outcomes: {
-      under: { label: 'Меньше (1-3)', mult: 1.95, check: v => v <= 3 },
-      over: { label: 'Больше (4-6)', mult: 1.95, check: v => v >= 4 },
-      even: { label: 'Чётное', mult: 1.95, check: v => v % 2 === 0 },
-      odd: { label: 'Нечётное', mult: 1.95, check: v => v % 2 !== 0 },
-      '1': { label: 'Точно 1', mult: 5.80, check: v => v === 1 },
-      '2': { label: 'Точно 2', mult: 5.80, check: v => v === 2 },
-      '3': { label: 'Точно 3', mult: 5.80, check: v => v === 3 },
-      '4': { label: 'Точно 4', mult: 5.80, check: v => v === 4 },
-      '5': { label: 'Точно 5', mult: 5.80, check: v => v === 5 },
-      '6': { label: 'Точно 6', mult: 5.80, check: v => v === 6 }
+      under:  { label: '1–3 Меньше',  mult: 1.95, check: v => v <= 3 },
+      over:   { label: '4–6 Больше',  mult: 1.95, check: v => v >= 4 },
+      even:   { label: 'Чётное',      mult: 1.95, check: v => v % 2 === 0 },
+      odd:    { label: 'Нечётное',    mult: 1.95, check: v => v % 2 !== 0 },
+      '1':    { label: 'Точно 1 ⚀',   mult: 5.80, check: v => v === 1 },
+      '2':    { label: 'Точно 2 ⚁',   mult: 5.80, check: v => v === 2 },
+      '3':    { label: 'Точно 3 ⚂',   mult: 5.80, check: v => v === 3 },
+      '4':    { label: 'Точно 4 ⚃',   mult: 5.80, check: v => v === 4 },
+      '5':    { label: 'Точно 5 ⚄',   mult: 5.80, check: v => v === 5 },
+      '6':    { label: 'Точно 6 ⚅',   mult: 5.80, check: v => v === 6 },
     }
   },
   bowling: {
     emoji: '🎳',
     name: 'Боулинг',
+    maxVal: 6,
     outcomes: {
-      strike: { label: 'Страйк (все кегли)', mult: 4.00, check: v => v === 6 },
-      pins4: { label: 'Сбить 4+ кеглей', mult: 1.90, check: v => v >= 4 }
+      gutter:  { label: 'Гаттер (0–2)',    mult: 5.50, check: v => v <= 2 },
+      partial: { label: '3–5 кеглей',      mult: 1.80, check: v => v >= 3 && v <= 5 },
+      pins4:   { label: '4+ кегли',        mult: 1.70, check: v => v >= 4 },
+      pins5:   { label: '5–6 кеглей',      mult: 2.80, check: v => v >= 5 },
+      strike:  { label: 'Страйк 🎳 (6/6)', mult: 4.00, check: v => v === 6 },
     }
   },
   darts: {
     emoji: '🎯',
     name: 'Дартс',
+    maxVal: 6,
     outcomes: {
-      bullseye: { label: 'Яблочко (центр)', mult: 5.00, check: v => v === 6 },
-      hit: { label: 'Попадание в мишень', mult: 1.50, check: v => v >= 2 }
+      miss:     { label: 'Мимо (1)',         mult: 5.00, check: v => v === 1 },
+      outer:    { label: 'Внешнее кольцо (2–3)', mult: 2.50, check: v => v >= 2 && v <= 3 },
+      hit:      { label: 'Попадание (2–5)',  mult: 1.50, check: v => v >= 2 && v <= 5 },
+      inner:    { label: 'Внутр. кольцо (4–5)', mult: 2.80, check: v => v >= 4 && v <= 5 },
+      bullseye: { label: 'Яблочко 🎯 (6)',   mult: 5.00, check: v => v === 6 },
     }
   },
   basketball: {
     emoji: '🏀',
     name: 'Баскетбол',
+    maxVal: 5,
     outcomes: {
-      score: { label: 'Попадание в кольцо', mult: 1.95, check: v => v >= 4 }
+      miss:   { label: 'Мимо (1–3)',         mult: 3.50, check: v => v <= 3 },
+      score:  { label: 'Попадание 🏀 (4–5)', mult: 1.95, check: v => v >= 4 },
+      swish:  { label: 'Чистый бросок 🔥 (5)',mult: 4.50, check: v => v === 5 },
     }
   },
   football: {
     emoji: '⚽️',
     name: 'Футбол',
+    maxVal: 5,
     outcomes: {
-      goal: { label: 'Гол в ворота', mult: 1.95, check: v => v >= 3 }
+      miss:       { label: 'Мимо (1–2)',           mult: 3.50, check: v => v <= 2 },
+      goal:       { label: 'Гол ⚽ (3–5)',          mult: 1.95, check: v => v >= 3 },
+      top_corner: { label: 'В девятку 🔥 (5)',      mult: 5.00, check: v => v === 5 },
     }
   },
   slots: {
     emoji: '🎰',
     name: 'Слоты',
+    maxVal: 64,
     outcomes: {
       spin: {
         label: 'Вращение барабана',

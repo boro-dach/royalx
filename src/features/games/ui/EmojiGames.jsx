@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/context/AppContext';
 import GameHeader from './GameHeader';
 import BetControls from './BetControls';
@@ -6,93 +6,267 @@ import { bjAudio } from '@/shared/lib/blackjackAudio';
 import { TetherIcon } from '@/shared/ui/Icons';
 import './Games.css';
 
+// ─── Game configs (must mirror server GAME_CONFIG) ───────────────────────────
 const GAMES = [
-  { id: 'dice', title: 'Кости', emoji: '🎲' },
-  { id: 'bowling', title: 'Боулинг', emoji: '🎳' },
-  { id: 'darts', title: 'Дартс', emoji: '🎯' },
-  { id: 'basketball', title: 'Баскетбол', emoji: '🏀' },
-  { id: 'football', title: 'Футбол', emoji: '⚽' },
-  { id: 'slots', title: 'Слоты', emoji: '🎰' },
+  {
+    id: 'dice',
+    emoji: '🎲',
+    title: 'Кости',
+    desc: 'Угадай цифру или диапазон',
+    minMult: 1.95,
+    maxMult: 5.80,
+    color: '#00e699',
+    outcomes: [
+      { key: 'under',  label: '1–3 Меньше',      mult: 1.95 },
+      { key: 'over',   label: '4–6 Больше',       mult: 1.95 },
+      { key: 'even',   label: 'Чётное',           mult: 1.95 },
+      { key: 'odd',    label: 'Нечётное',         mult: 1.95 },
+      { key: '1',      label: 'Точно 1 ⚀',        mult: 5.80 },
+      { key: '2',      label: 'Точно 2 ⚁',        mult: 5.80 },
+      { key: '3',      label: 'Точно 3 ⚂',        mult: 5.80 },
+      { key: '4',      label: 'Точно 4 ⚃',        mult: 5.80 },
+      { key: '5',      label: 'Точно 5 ⚄',        mult: 5.80 },
+      { key: '6',      label: 'Точно 6 ⚅',        mult: 5.80 },
+    ]
+  },
+  {
+    id: 'bowling',
+    emoji: '🎳',
+    title: 'Боулинг',
+    desc: 'Сколько кеглей собьёт шар?',
+    minMult: 1.70,
+    maxMult: 5.50,
+    color: '#a78bfa',
+    outcomes: [
+      { key: 'gutter',  label: 'Гаттер (0–2)',     mult: 5.50 },
+      { key: 'partial', label: '3–5 кеглей',       mult: 1.80 },
+      { key: 'pins4',   label: '4+ кегли',         mult: 1.70 },
+      { key: 'pins5',   label: '5–6 кеглей',       mult: 2.80 },
+      { key: 'strike',  label: 'Страйк 🎳 (6/6)',  mult: 4.00 },
+    ]
+  },
+  {
+    id: 'darts',
+    emoji: '🎯',
+    title: 'Дартс',
+    desc: 'Куда попадёт дротик?',
+    minMult: 1.50,
+    maxMult: 5.00,
+    color: '#f59e0b',
+    outcomes: [
+      { key: 'miss',     label: 'Мимо (1)',             mult: 5.00 },
+      { key: 'outer',    label: 'Внешн. кольцо (2–3)',  mult: 2.50 },
+      { key: 'hit',      label: 'Попадание (2–5)',       mult: 1.50 },
+      { key: 'inner',    label: 'Внутр. кольцо (4–5)',   mult: 2.80 },
+      { key: 'bullseye', label: 'Яблочко 🎯 (6)',         mult: 5.00 },
+    ]
+  },
+  {
+    id: 'basketball',
+    emoji: '🏀',
+    title: 'Баскетбол',
+    desc: 'Попадёт ли мяч в корзину?',
+    minMult: 1.95,
+    maxMult: 4.50,
+    color: '#fb923c',
+    outcomes: [
+      { key: 'miss',  label: 'Мимо (1–3)',              mult: 3.50 },
+      { key: 'score', label: 'Попадание 🏀 (4–5)',       mult: 1.95 },
+      { key: 'swish', label: 'Чистый бросок 🔥 (5)',     mult: 4.50 },
+    ]
+  },
+  {
+    id: 'football',
+    emoji: '⚽',
+    title: 'Футбол',
+    desc: 'Гол или мимо ворот?',
+    minMult: 1.95,
+    maxMult: 5.00,
+    color: '#34d399',
+    outcomes: [
+      { key: 'miss',       label: 'Мимо (1–2)',           mult: 3.50 },
+      { key: 'goal',       label: 'Гол ⚽ (3–5)',          mult: 1.95 },
+      { key: 'top_corner', label: 'В девятку 🔥 (5)',      mult: 5.00 },
+    ]
+  },
+  {
+    id: 'slots',
+    emoji: '🎰',
+    title: 'Слоты',
+    desc: 'Крути барабан! До x25',
+    minMult: 1.80,
+    maxMult: 25.00,
+    color: '#facc15',
+    outcomes: [
+      { key: 'spin', label: 'Крутить барабан', mult: null, isAuto: true }
+    ]
+  },
 ];
 
-const GAME_OUTCOMES = {
-  dice: [
-    { key: 'under', label: 'Меньше (1-3)', mult: 'x1.95' },
-    { key: 'over', label: 'Больше (4-6)', mult: 'x1.95' },
-    { key: 'even', label: 'Чётное', mult: 'x1.95' },
-    { key: 'odd', label: 'Нечётное', mult: 'x1.95' },
-    { key: '1', label: 'Точно 1', mult: 'x5.80' },
-    { key: '2', label: 'Точно 2', mult: 'x5.80' },
-    { key: '3', label: 'Точно 3', mult: 'x5.80' },
-    { key: '4', label: 'Точно 4', mult: 'x5.80' },
-    { key: '5', label: 'Точно 5', mult: 'x5.80' },
-    { key: '6', label: 'Точно 6', mult: 'x5.80' },
-  ],
-  bowling: [
-    { key: 'strike', label: 'Страйк (все кегли)', mult: 'x4.00' },
-    { key: 'pins4', label: 'Сбить 4+ кеглей', mult: 'x1.90' },
-  ],
-  darts: [
-    { key: 'bullseye', label: 'Яблочко (центр)', mult: 'x5.00' },
-    { key: 'hit', label: 'Попадание в мишень', mult: 'x1.50' },
-  ],
-  basketball: [
-    { key: 'score', label: 'Попадание в корзину', mult: 'x1.95' },
-  ],
-  football: [
-    { key: 'goal', label: 'Гол в ворота', mult: 'x1.95' },
-  ],
-  slots: [
-    { key: 'spin', label: 'Крутить (Джекпот 777)', mult: 'до x25' },
-  ]
-};
+function triggerHaptic(style = 'medium') {
+  if (typeof window !== 'undefined' && window.Telegram?.WebApp?.HapticFeedback) {
+    try { window.Telegram.WebApp.HapticFeedback.impactOccurred(style); } catch (e) {}
+  }
+}
 
-const DICE_FACES = ['', '⚀ 1', '⚁ 2', '⚂ 3', '⚃ 4', '⚄ 5', '⚅ 6'];
+// ─── Slots visual result ──────────────────────────────────────────────────────
+function getSlotsResult(val) {
+  if (val === 64) return { label: '🍋 🍋 🍋', tier: '777 — ДЖЕКПОТ!', mult: '×25', color: '#facc15' };
+  if ([1, 22, 43].includes(val)) return { label: '🍒 🍒 🍒', tier: '3 одинаковых', mult: '×5', color: '#f87171' };
+  if (val % 16 === 0 || val === 32 || val === 48) return { label: '🍊 🍊 🔔', tier: '2 одинаковых', mult: '×1.8', color: '#fb923c' };
+  const syms = ['🍒', '🍊', '🍋', '🍇', '🔔', '⭐', '7️⃣'];
+  const s1 = syms[val % syms.length];
+  const s2 = syms[(val + 2) % syms.length];
+  const s3 = syms[(val + 4) % syms.length];
+  return { label: `${s1} ${s2} ${s3}`, tier: 'Нет совпадений', mult: null, color: '#8a8f99' };
+}
 
-export default function EmojiGames({ onBack, initialGame = 'dice' }) {
-  const { balance, setBalance, showToast, tgUser, getAuthHeaders } = useApp();
+function getResultText(gameId, val, isWin) {
+  switch (gameId) {
+    case 'dice':
+      return `Выпало: ${['', '1 ⚀', '2 ⚁', '3 ⚂', '4 ⚃', '5 ⚄', '6 ⚅'][val] || val}`;
+    case 'bowling':
+      if (val === 6) return '🎳 СТРАЙК! Все 6 кеглей!';
+      if (val >= 4) return `Сбито ${val} кеглей`;
+      return `Только ${val} кегл${val === 1 ? 'я' : 'и'}`;
+    case 'darts':
+      if (val === 6) return '🎯 ЯБЛОЧКО! Прямо в центр!';
+      if (val >= 4) return `Внутреннее кольцо (${val})`;
+      if (val >= 2) return `Попадание во внешнее кольцо (${val})`;
+      return 'Мимо мишени (1)';
+    case 'basketball':
+      if (val === 5) return '🔥 ЧИСТЫЙ БРОСОК! Swish!';
+      if (val >= 4) return '🏀 Мяч в корзине!';
+      return `Мяч не долетел (${val})`;
+    case 'football':
+      if (val === 5) return '🔥 В ДЕВЯТКУ! Идеальный удар!';
+      if (val >= 3) return '⚽ Гол!';
+      return `Мяч мимо ворот (${val})`;
+    case 'slots':
+      return getSlotsResult(val).tier;
+    default:
+      return `Результат: ${val}`;
+  }
+}
 
-  const [activeGameId, setActiveGameId] = useState(
-    GAMES.some(g => g.id === initialGame) ? initialGame : 'dice'
+// ─── Lobby screen ─────────────────────────────────────────────────────────────
+function LobbyScreen({ onSelectGame, onBack }) {
+  return (
+    <div className="game-screen" style={{ overflowY: 'auto' }}>
+      <GameHeader title="Эмодзи игры" onBack={onBack} />
+      <div style={{ padding: '12px 14px 32px' }}>
+        <div style={{
+          fontSize: '11px',
+          fontWeight: 800,
+          color: '#8a8f99',
+          textTransform: 'uppercase',
+          letterSpacing: '0.6px',
+          marginBottom: '12px'
+        }}>
+          Выберите игру
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {GAMES.map(g => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => { triggerHaptic('light'); onSelectGame(g.id); }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+                padding: '14px 16px',
+                borderRadius: '16px',
+                border: `1px solid rgba(255,255,255,0.07)`,
+                background: 'rgba(255,255,255,0.03)',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {/* Emoji Icon */}
+              <div style={{
+                width: '52px',
+                height: '52px',
+                borderRadius: '14px',
+                background: `${g.color}18`,
+                border: `1px solid ${g.color}40`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '26px',
+                flexShrink: 0,
+              }}>
+                {g.emoji}
+              </div>
+
+              {/* Info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff', marginBottom: '3px' }}>
+                  {g.title}
+                </div>
+                <div style={{ fontSize: '12px', color: '#8a8f99' }}>
+                  {g.desc}
+                </div>
+              </div>
+
+              {/* Multipliers */}
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <div style={{
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  color: g.color,
+                  marginBottom: '2px'
+                }}>
+                  до x{g.maxMult}
+                </div>
+                <div style={{ fontSize: '10px', color: '#8a8f99' }}>
+                  {g.outcomes.length} исход{g.outcomes.length === 1 ? '' : g.outcomes.length <= 4 ? 'а' : 'ов'}
+                </div>
+              </div>
+
+              {/* Arrow */}
+              <div style={{ color: '#8a8f99', fontSize: '14px', flexShrink: 0 }}>›</div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
-  const [selectedOutcome, setSelectedOutcome] = useState('under');
+}
+
+// ─── Game screen ──────────────────────────────────────────────────────────────
+function GameScreen({ gameId, onBack, onBackToLobby }) {
+  const { balance, setBalance, showToast, tgUser, getAuthHeaders } = useApp();
+  const game = GAMES.find(g => g.id === gameId);
+
+  const [selectedOutcome, setSelectedOutcome] = useState(game?.outcomes[0]?.key || '');
   const [betAmount, setBetAmount] = useState(1);
   const [isRolling, setIsRolling] = useState(false);
   const [lastResult, setLastResult] = useState(null);
-  const [displayEmoji, setDisplayEmoji] = useState('🎲');
+  const rollingRef = useRef(false);
 
-  // Change outcome default when game changes
   useEffect(() => {
-    const list = GAME_OUTCOMES[activeGameId] || [];
-    if (list.length > 0) {
-      setSelectedOutcome(list[0].key);
-    }
-    const currentCfg = GAMES.find(g => g.id === activeGameId);
-    if (currentCfg) {
-      setDisplayEmoji(currentCfg.emoji);
-    }
+    setSelectedOutcome(game?.outcomes[0]?.key || '');
     setLastResult(null);
-  }, [activeGameId]);
+  }, [gameId]);
 
-  const triggerHaptic = (style = 'medium') => {
-    if (typeof window !== 'undefined' && window.Telegram?.WebApp?.HapticFeedback) {
-      try {
-        window.Telegram.WebApp.HapticFeedback.impactOccurred(style);
-      } catch (e) {}
-    }
-  };
+  if (!game) return null;
+
+  const selectedOutcomeObj = game.outcomes.find(o => o.key === selectedOutcome);
 
   const handleRoll = async () => {
+    if (rollingRef.current) return;
     const bet = parseFloat(betAmount);
     if (isNaN(bet) || bet <= 0) {
-      showToast('❌ Укажите корректную ставку', true);
+      showToast('❌ Укажите ставку', true);
       return;
     }
     if (bet > balance) {
-      showToast('❌ Недостаточно средств на балансе', true);
+      showToast('❌ Недостаточно средств', true);
       return;
     }
-
+    rollingRef.current = true;
     setIsRolling(true);
     setLastResult(null);
     triggerHaptic('heavy');
@@ -103,225 +277,250 @@ export default function EmojiGames({ onBack, initialGame = 'dice' }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
-          game: activeGameId,
+          game: gameId,
           outcome: selectedOutcome,
           betAmount: bet,
           userId: tgUser?.id || '3982051'
         })
       });
-
       const data = await res.json();
 
-      // Animate roll for 1.1s for realistic feel
       setTimeout(() => {
         setIsRolling(false);
+        rollingRef.current = false;
         if (data.success) {
           setLastResult(data);
-          if (typeof data.balance === 'number') {
-            setBalance(data.balance);
-          }
-
+          if (typeof data.balance === 'number') setBalance(data.balance);
           if (data.isWin) {
             triggerHaptic('success');
             bjAudio.playCard();
-            showToast(`🎉 Победа! Вы выиграли $${data.winAmount.toFixed(2)} USDT (x${data.multiplier})!`);
+            showToast(`🎉 Победа! +$${data.winAmount?.toFixed(2)} USDT (×${data.multiplier})`);
           } else {
             triggerHaptic('error');
-            showToast(`Раунд завершён. Попробуйте ещё раз!`);
           }
         } else {
           showToast(data.error || 'Ошибка ставки', true);
         }
-      }, 1100);
-
+      }, 1200);
     } catch (e) {
       setTimeout(() => {
         setIsRolling(false);
-        showToast('Ошибка сети при совершении ставки', true);
+        rollingRef.current = false;
+        showToast('Ошибка сети', true);
       }, 1000);
     }
   };
 
-  const currentGame = GAMES.find(g => g.id === activeGameId) || GAMES[0];
-  const outcomes = GAME_OUTCOMES[activeGameId] || [];
-
-  const renderResultBadge = () => {
-    if (!lastResult) return null;
-    const { isWin, value, multiplier, winAmount } = lastResult;
-
-    let detailText = `Выпало: ${value}`;
-    if (activeGameId === 'dice') {
-      detailText = `Выпало: ${DICE_FACES[value] || value}`;
-    } else if (activeGameId === 'bowling') {
-      detailText = value === 6 ? '🎳 СТРАЙК! Все 6 кеглей!' : `Сбито ${value} кеглей`;
-    } else if (activeGameId === 'darts') {
-      detailText = value === 6 ? '🎯 ЯБЛОЧКО! В центр!' : value >= 2 ? `🎯 Попадание (${value})` : 'Мимо мишени (1)';
-    } else if (activeGameId === 'basketball') {
-      detailText = value >= 4 ? '🏀 ЧИСТОЕ ПОПАДАНИЕ!' : 'Мимо корзины';
-    } else if (activeGameId === 'football') {
-      detailText = value >= 3 ? '⚽️ ГОЛ В ДЕВЯТКУ!' : 'Вратарь отбил мяч';
-    } else if (activeGameId === 'slots') {
-      if (value === 64) detailText = '🎰 ДЖЕКПОТ 777! (x25)';
-      else if ([1, 22, 43].includes(value)) detailText = '🎰 3 Одинаковых символа! (x5)';
-      else if (value % 16 === 0 || value === 32 || value === 48) detailText = '🎰 2 Одинаковых символа! (x1.8)';
-      else detailText = 'Символы не совпали';
-    }
-
-    return (
-      <div style={{
-        marginTop: '10px',
-        padding: '8px 14px',
-        borderRadius: '12px',
-        background: isWin ? 'rgba(0, 230, 153, 0.15)' : 'rgba(255, 77, 77, 0.12)',
-        border: `1px solid ${isWin ? 'rgba(0, 230, 153, 0.4)' : 'rgba(255, 77, 77, 0.3)'}`,
-        textAlign: 'center'
-      }}>
-        <div style={{ fontSize: '13px', fontWeight: 800, color: isWin ? '#00e699' : '#ff4d4d' }}>
-          {isWin ? `ВЫИГРЫШ +$${winAmount?.toFixed(2)} USDT (${multiplier}x)` : 'ПРОИГРЫШ'}
-        </div>
-        <div style={{ fontSize: '11px', color: '#c0c5d0', marginTop: '2px' }}>
-          {detailText}
-        </div>
-      </div>
-    );
-  };
+  // ── Render ──
+  const isSlots = gameId === 'slots';
+  const slotsResult = lastResult && isSlots ? getSlotsResult(lastResult.value) : null;
 
   return (
     <div className="game-screen" style={{ overflowY: 'auto' }}>
-      <GameHeader title="Эмодзи игры" onBack={onBack} />
+      {/* Header with back-to-lobby */}
+      <div className="game-header">
+        <button className="game-back-btn" onClick={onBackToLobby} aria-label="К списку игр">
+          <div className="game-back-icon-circle">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </div>
+          <span className="game-header-title">{game.emoji} {game.title}</span>
+        </button>
 
-      {/* Game Selector Tabs */}
-      <div style={{
-        display: 'flex',
-        gap: '6px',
-        padding: '10px 14px 6px',
-        overflowX: 'auto',
-        scrollbarWidth: 'none',
-        flexShrink: 0
-      }}>
-        {GAMES.map(g => (
-          <button
-            key={g.id}
-            type="button"
-            onClick={() => {
-              if (isRolling) return;
-              setActiveGameId(g.id);
-              triggerHaptic('light');
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 12px',
-              borderRadius: '12px',
-              border: activeGameId === g.id ? '1px solid #00e699' : '1px solid rgba(255,255,255,0.08)',
-              background: activeGameId === g.id ? 'rgba(0, 230, 153, 0.12)' : 'rgba(255,255,255,0.04)',
-              color: activeGameId === g.id ? '#00e699' : '#ffffff',
-              fontSize: '12px',
-              fontWeight: 700,
-              whiteSpace: 'nowrap',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-          >
-            <span style={{ fontSize: '16px' }}>{g.emoji}</span>
-            <span>{g.title}</span>
-          </button>
-        ))}
+        <div
+          className="game-balance-box"
+          onClick={() => {}}
+          style={{ cursor: 'default' }}
+          title="Баланс"
+        >
+          <TetherIcon size={28} />
+          <span className="game-balance-num">
+            {balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </span>
+        </div>
       </div>
 
-      <div style={{ padding: '8px 14px 24px', display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
-        {/* Animated Game Stage */}
+      <div style={{ padding: '10px 14px 32px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+        {/* ── Stage ── */}
         <div style={{
-          background: 'linear-gradient(180deg, rgba(20, 23, 33, 0.9) 0%, rgba(12, 13, 18, 0.95) 100%)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          borderRadius: '16px',
+          borderRadius: '18px',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.07)',
           padding: '24px 16px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '170px',
+          gap: '10px',
           position: 'relative',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          minHeight: '160px',
+          justifyContent: 'center',
         }}>
-          {/* Background Glow */}
+          {/* Glow */}
           <div style={{
             position: 'absolute',
-            width: '120px',
-            height: '120px',
-            borderRadius: '50%',
-            background: isRolling ? 'radial-gradient(circle, rgba(0,230,153,0.35) 0%, transparent 70%)' : 'radial-gradient(circle, rgba(0,230,153,0.12) 0%, transparent 70%)',
-            filter: 'blur(20px)',
-            pointerEvents: 'none'
+            inset: 0,
+            background: isRolling
+              ? `radial-gradient(ellipse at 50% 50%, ${game.color}28 0%, transparent 65%)`
+              : lastResult?.isWin
+                ? `radial-gradient(ellipse at 50% 50%, ${game.color}18 0%, transparent 65%)`
+                : 'transparent',
+            pointerEvents: 'none',
+            transition: 'background 0.4s ease',
           }} />
 
-          {/* Main Visual */}
-          <div style={{
-            fontSize: isRolling ? '72px' : '64px',
-            transform: isRolling ? 'scale(1.15) rotate(15deg)' : 'scale(1)',
-            transition: 'all 0.2s ease',
-            animation: isRolling ? 'pulse 0.4s infinite alternate' : 'none',
-            lineHeight: 1
-          }}>
-            {isRolling ? '🎲' : (lastResult?.isWin ? '🎉' : currentGame.emoji)}
-          </div>
+          {/* Slots symbols */}
+          {isSlots && lastResult && slotsResult && !isRolling ? (
+            <>
+              <div style={{ fontSize: '30px', letterSpacing: '8px', fontWeight: 900 }}>
+                {slotsResult.label}
+              </div>
+              <div style={{
+                fontSize: '13px',
+                fontWeight: 800,
+                color: slotsResult.color,
+                background: `${slotsResult.color}18`,
+                padding: '4px 14px',
+                borderRadius: '20px',
+                border: `1px solid ${slotsResult.color}40`,
+              }}>
+                {slotsResult.tier} {slotsResult.mult ? `— ${slotsResult.mult}` : ''}
+              </div>
+            </>
+          ) : (
+            <div style={{
+              fontSize: isRolling ? '72px' : '58px',
+              lineHeight: 1,
+              transform: isRolling ? 'scale(1.1) rotate(12deg)' : 'scale(1)',
+              transition: 'all 0.2s ease',
+            }}>
+              {isRolling ? game.emoji : (lastResult?.isWin ? '🎉' : (lastResult ? '😔' : game.emoji))}
+            </div>
+          )}
 
-          <div style={{ fontSize: '15px', fontWeight: 800, color: '#ffffff', marginTop: '12px' }}>
-            {isRolling ? 'Бросок выполняется...' : currentGame.title}
-          </div>
-
-          <div style={{ fontSize: '11px', color: '#8a8f99', marginTop: '4px' }}>
-            {activeGameId === 'slots' ? 'Выигрыш до x25 ставки при 777' : 'Исход полностью синхронизирован с Telegram'}
-          </div>
-
-          {renderResultBadge()}
+          {/* Result text */}
+          {lastResult && !isRolling ? (
+            <div style={{
+              padding: '6px 16px',
+              borderRadius: '20px',
+              background: lastResult.isWin ? 'rgba(0,230,153,0.12)' : 'rgba(255,77,77,0.10)',
+              border: `1px solid ${lastResult.isWin ? 'rgba(0,230,153,0.3)' : 'rgba(255,77,77,0.25)'}`,
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '12px', fontWeight: 800, color: lastResult.isWin ? '#00e699' : '#ff4d4d' }}>
+                {lastResult.isWin
+                  ? `+$${lastResult.winAmount?.toFixed(2)} USDT (×${lastResult.multiplier})`
+                  : 'Не повезло'
+                }
+              </div>
+              <div style={{ fontSize: '11px', color: '#8a8f99', marginTop: '1px' }}>
+                {getResultText(gameId, lastResult.value, lastResult.isWin)}
+              </div>
+            </div>
+          ) : isRolling ? (
+            <div style={{ fontSize: '13px', color: '#8a8f99', fontWeight: 600 }}>Бросок...</div>
+          ) : (
+            <div style={{ fontSize: '12px', color: '#8a8f99' }}>{game.desc}</div>
+          )}
         </div>
 
-        {/* Outcome Selector */}
-        <div>
-          <div style={{ fontSize: '11px', fontWeight: 800, color: '#8a8f99', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>
-            ВЫБЕРИТЕ ИСХОД
+        {/* ── Outcome picker ── */}
+        {!isSlots ? (
+          <div>
+            <div style={{
+              fontSize: '11px',
+              fontWeight: 800,
+              color: '#8a8f99',
+              textTransform: 'uppercase',
+              letterSpacing: '0.6px',
+              marginBottom: '8px',
+            }}>
+              Выберите исход
+            </div>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: game.outcomes.length <= 2 ? 'repeat(2, 1fr)' : game.outcomes.length >= 8 ? 'repeat(2, 1fr)' : 'repeat(2, 1fr)',
+              gap: '8px',
+            }}>
+              {game.outcomes.map(o => {
+                const isSel = selectedOutcome === o.key;
+                return (
+                  <button
+                    key={o.key}
+                    type="button"
+                    disabled={isRolling}
+                    onClick={() => { setSelectedOutcome(o.key); triggerHaptic('light'); }}
+                    style={{
+                      padding: '12px 10px',
+                      borderRadius: '14px',
+                      border: isSel ? `1px solid ${game.color}` : '1px solid rgba(255,255,255,0.08)',
+                      background: isSel ? `${game.color}18` : 'rgba(255,255,255,0.03)',
+                      cursor: isRolling ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '5px',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: isSel ? 800 : 600,
+                      color: isSel ? '#fff' : '#c0c5d0',
+                      textAlign: 'center',
+                      lineHeight: 1.3,
+                    }}>
+                      {o.label}
+                    </span>
+                    <span style={{
+                      fontSize: '14px',
+                      fontWeight: 900,
+                      color: isSel ? game.color : '#8a8f99',
+                    }}>
+                      ×{o.mult}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
+        ) : (
+          /* Slots tier breakdown */
           <div style={{
-            display: 'grid',
-            gridTemplateColumns: outcomes.length > 4 ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)',
-            gap: '8px'
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.07)',
+            borderRadius: '14px',
+            padding: '12px 14px',
           }}>
-            {outcomes.map(item => {
-              const isSelected = selectedOutcome === item.key;
-              return (
-                <button
-                  key={item.key}
-                  type="button"
-                  disabled={isRolling}
-                  onClick={() => {
-                    setSelectedOutcome(item.key);
-                    triggerHaptic('light');
-                  }}
-                  style={{
-                    padding: '10px 8px',
-                    borderRadius: '12px',
-                    border: isSelected ? '1px solid #00e699' : '1px solid rgba(255,255,255,0.08)',
-                    background: isSelected ? 'rgba(0, 230, 153, 0.15)' : 'rgba(255,255,255,0.03)',
-                    color: '#ffffff',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '4px',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <span style={{ fontSize: '12px', fontWeight: isSelected ? 800 : 600 }}>{item.label}</span>
-                  <span style={{ fontSize: '11px', fontWeight: 800, color: '#00e699' }}>{item.mult}</span>
-                </button>
-              );
-            })}
+            <div style={{ fontSize: '11px', fontWeight: 800, color: '#8a8f99', textTransform: 'uppercase', marginBottom: '10px', letterSpacing: '0.6px' }}>
+              Таблица выплат
+            </div>
+            {[
+              { symbols: '🍋 🍋 🍋', name: 'Джекпот 777', mult: '×25', color: '#facc15' },
+              { symbols: '🍒 🍒 🍒', name: '3 одинаковых', mult: '×5', color: '#f87171' },
+              { symbols: '🍊 🍊 🔔', name: '2 одинаковых', mult: '×1.8', color: '#fb923c' },
+              { symbols: '🍒 🍊 🍋', name: 'Нет совпадений', mult: '×0', color: '#8a8f99' },
+            ].map(tier => (
+              <div key={tier.name} style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '7px 0',
+                borderBottom: '1px solid rgba(255,255,255,0.05)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '15px', letterSpacing: '2px' }}>{tier.symbols}</span>
+                  <span style={{ fontSize: '12px', color: '#c0c5d0' }}>{tier.name}</span>
+                </div>
+                <span style={{ fontSize: '14px', fontWeight: 900, color: tier.color }}>{tier.mult}</span>
+              </div>
+            ))}
           </div>
-        </div>
+        )}
 
-        {/* Bet Controls */}
+        {/* ── Bet Controls ── */}
         <BetControls
           betAmount={betAmount}
           setBetAmount={setBetAmount}
@@ -329,41 +528,69 @@ export default function EmojiGames({ onBack, initialGame = 'dice' }) {
           disabled={isRolling}
         />
 
-        {/* Action Button */}
+        {/* ── Roll button ── */}
         <button
           type="button"
-          className="game-action-btn primary"
           disabled={isRolling || betAmount <= 0 || betAmount > balance}
           onClick={handleRoll}
           style={{
-            marginTop: '4px',
             padding: '15px',
             fontSize: '15px',
-            fontWeight: 800,
-            borderRadius: '14px',
-            background: isRolling || betAmount > balance ? '#1a1f2c' : 'linear-gradient(135deg, #00e699 0%, #00b377 100%)',
-            color: isRolling || betAmount > balance ? '#8a8f99' : '#05140d',
+            fontWeight: 900,
+            borderRadius: '16px',
             border: 'none',
             cursor: isRolling || betAmount > balance ? 'not-allowed' : 'pointer',
+            background: isRolling || betAmount > balance
+              ? '#1a1f2c'
+              : `linear-gradient(135deg, ${game.color} 0%, ${game.color}99 100%)`,
+            color: isRolling || betAmount > balance ? '#8a8f99' : '#050a0a',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '8px',
-            boxShadow: isRolling || betAmount > balance ? 'none' : '0 8px 24px rgba(0, 230, 153, 0.3)'
+            boxShadow: isRolling || betAmount > balance ? 'none' : `0 8px 24px ${game.color}40`,
+            transition: 'all 0.2s ease',
           }}
         >
           {isRolling ? (
-            'БРОСАЕМ...'
+            <span>Бросок...</span>
           ) : (
             <>
-              <span>{activeGameId === 'slots' ? 'КРУТИТЬ' : 'БРОСИТЬ'}</span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', opacity: 0.9 }}>
-                (<TetherIcon size={16} /> {betAmount})
+              <span style={{ fontSize: '18px' }}>{isSlots ? '🎰' : game.emoji}</span>
+              <span>
+                {isSlots ? 'Крутить' : gameId === 'dice' ? 'Бросить кубик' : gameId === 'bowling' ? 'Бросить шар' : gameId === 'darts' ? 'Бросить дротик' : gameId === 'basketball' ? 'Бросить мяч' : 'Нанести удар'}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', opacity: 0.85, fontSize: '13px' }}>
+                (<TetherIcon size={14} /> {betAmount})
               </span>
             </>
           )}
         </button>
       </div>
     </div>
+  );
+}
+
+// ─── Root export ─────────────────────────────────────────────────────────────
+export default function EmojiGames({ onBack, initialGame = null }) {
+  const [selectedGame, setSelectedGame] = useState(
+    initialGame && initialGame !== 'emoji' ? initialGame : null
+  );
+
+  if (selectedGame) {
+    return (
+      <GameScreen
+        gameId={selectedGame}
+        onBack={onBack}
+        onBackToLobby={() => setSelectedGame(null)}
+      />
+    );
+  }
+
+  return (
+    <LobbyScreen
+      onSelectGame={setSelectedGame}
+      onBack={onBack}
+    />
   );
 }
