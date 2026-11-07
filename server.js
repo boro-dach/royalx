@@ -573,7 +573,7 @@ const PRIVACY_URL = process.env.PRIVACY_URL || 'https://telegra.ph/POLITIKA-KONF
 const XROCKET_PAY_URL = process.env.XROCKET_PAY_URL || 'https://t.me/xrocket';
 const CRYPTOBOT_PAY_URL = process.env.CRYPTOBOT_PAY_URL || 'https://t.me/CryptoBot';
 const LAVEPAY_PAY_URL = process.env.LAVEPAY_PAY_URL || 'https://t.me/laveshka';
-const LAVEPAY_KEY = process.env.LAVEPAY_KEY || process.env.LAVE_KEY || '';
+const LAVEPAY_KEY = process.env.LAVEPAY_KEY || process.env.LAVE_KEY || 'LAVE-464-2dnBDnxprOacIbiyZ3NcOWUvJj073wJS';
 const LAVEPAY_WEBHOOK_SECRET = process.env.LAVEPAY_WEBHOOK_SECRET || process.env.LAVE_WEBHOOK_SECRET || '';
 const LAVEPAY_BASE_URL = 'https://laveshka.io/merchant/v1';
 
@@ -2471,13 +2471,13 @@ app.post('/api/payments/check-invoice', async (req, res) => {
     let isPaid = false;
 
     if (method === 'laveshka') {
-      if (LAVEPAY_KEY && invoiceId && invoiceId.startsWith('inv_')) {
+      if (LAVEPAY_KEY && invoiceId && !invoiceId.startsWith('LAVE-')) {
         try {
           const checkRes = await fetch(`https://laveshka.io/merchant/v1/invoices/${invoiceId}`, {
             headers: { 'X-Api-Key': LAVEPAY_KEY }
           });
           const checkData = await checkRes.json();
-          if (checkRes.ok && checkData.ok && checkData.data && checkData.data.status === 'paid') {
+          if (checkRes.ok && checkData.ok && checkData.data && (checkData.data.status === 'paid' || checkData.data.status === 'completed')) {
             isPaid = true;
           }
         } catch (e) {
