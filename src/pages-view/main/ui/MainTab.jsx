@@ -33,9 +33,9 @@ export default function MainTab() {
 
   // Compact quick rows
   const compactGames = [
+    { id: 'emoji', title: 'Эмодзи', icon: '🎲' },
     { id: 'keno', title: 'Кено', icon: '🧿', isSoon: true },
     { id: 'hilo', title: 'Hi-Lo', icon: '🌈', isSoon: true },
-    { id: 'wheel', title: 'Wheel', icon: '🎡', isSoon: true },
     { id: 'rb', title: 'R&B', icon: '🪬', isSoon: true },
     { id: 'coin', title: 'Орёл-Решка', icon: '🪙', isSoon: true }
   ];
@@ -63,9 +63,9 @@ export default function MainTab() {
   const allCatalog = [
     ...popularGames,
     ...exclusiveGames.filter(g => !popularGames.some(p => p.id === g.id)),
+    { id: 'emoji', title: 'Эмодзи Игры', image: null, icon: '🎲' },
     { id: 'keno', title: 'Кено', image: null, icon: '🧿', isSoon: true },
     { id: 'hilo', title: 'Hi-Lo', image: null, icon: '🌈', isSoon: true },
-    { id: 'wheel', title: 'Wheel', image: null, icon: '🎡', isSoon: true },
     { id: 'rb', title: 'R&B', image: null, icon: '🪬', isSoon: true },
     { id: 'coin', title: 'Орёл-Решка', image: null, icon: '🪙', isSoon: true }
   ];

@@ -6,6 +6,7 @@ import DiceGame from '@/features/games/ui/DiceGame';
 import CrashGame from '@/features/games/ui/CrashGame';
 import UpgradeGame from '@/features/games/ui/UpgradeGame';
 import BoxesGame from '@/features/games/ui/BoxesGame';
+import EmojiGames from '@/features/games/ui/EmojiGames';
 
 export default function GameOverlay() {
   const { activeGame, setActiveGame } = useApp();
@@ -27,7 +28,15 @@ export default function GameOverlay() {
       return <UpgradeGame onBack={handleClose} />;
     case 'boxes':
       return <BoxesGame onBack={handleClose} />;
+    case 'emoji':
+    case 'bowling':
+    case 'darts':
+    case 'basketball':
+    case 'football':
+    case 'slots':
+      return <EmojiGames onBack={handleClose} initialGame={activeGame === 'emoji' ? 'dice' : activeGame} />;
     default:
       return null;
   }
 }
+

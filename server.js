@@ -572,6 +572,14 @@ const RULES_URL = process.env.RULES_URL || 'https://telegra.ph/PRAVILA-ISPOLZOVA
 const PRIVACY_URL = process.env.PRIVACY_URL || 'https://telegra.ph/POLITIKA-KONFIDENCIALNOSTI-ROYAL-X-09-18';
 const XROCKET_PAY_URL = process.env.XROCKET_PAY_URL || 'https://t.me/xrocket';
 const CRYPTOBOT_PAY_URL = process.env.CRYPTOBOT_PAY_URL || 'https://t.me/CryptoBot';
+const LAVEPAY_PAY_URL = process.env.LAVEPAY_PAY_URL || 'https://t.me/laveshka';
+const LAVEPAY_KEY = process.env.LAVEPAY_KEY || process.env.LAVE_KEY || '';
+const LAVEPAY_WEBHOOK_SECRET = process.env.LAVEPAY_WEBHOOK_SECRET || process.env.LAVE_WEBHOOK_SECRET || '';
+const LAVEPAY_BASE_URL = 'https://laveshka.io/merchant/v1';
+
+const GAME_CHAT_ID = process.env.GAME_CHAT_ID || '-1004342464565';
+const BETS_CHANNEL_ID = process.env.BETS_CHANNEL_ID || '-1003974356935';
+const GAME_CHAT_URL = process.env.GAME_CHAT_URL || `https://t.me/c/${GAME_CHAT_ID.replace(/^-100/, '')}/1`;
 
 class DatabaseManager {
   constructor() {
@@ -739,12 +747,7 @@ class DatabaseManager {
           moderators: Array.isArray(parsed.moderators) ? parsed.moderators : [],
           agents: Array.isArray(parsed.agents) ? parsed.agents : [],
           proofs: Array.isArray(parsed.proofs) ? parsed.proofs : [],
-          promocodes: parsed.promocodes || {
-            'ROYAL100': { id: '1', code: 'ROYAL100', amount: 50.0, usesLeft: 100, maxUses: 100, active: true },
-            'START': { id: '2', code: 'START', amount: 25.0, usesLeft: 500, maxUses: 500, active: true },
-            'ROYALX': { id: '3', code: 'ROYALX', amount: 100.0, usesLeft: 50, maxUses: 50, active: true },
-            'VIP2026': { id: '4', code: 'VIP2026', amount: 500.0, usesLeft: 10, maxUses: 10, active: true }
-          }
+          promocodes: (parsed.promocodes && typeof parsed.promocodes === 'object') ? parsed.promocodes : {}
         };
       }
     } catch (e) {
@@ -765,12 +768,7 @@ class DatabaseManager {
       },
       treasury: 5000.00,
       admins: [...DEFAULT_ADMINS],
-      promocodes: {
-        'ROYAL100': { id: '1', code: 'ROYAL100', amount: 50.0, usesLeft: 100, maxUses: 100, active: true },
-        'START': { id: '2', code: 'START', amount: 25.0, usesLeft: 500, maxUses: 500, active: true },
-        'ROYALX': { id: '3', code: 'ROYALX', amount: 100.0, usesLeft: 50, maxUses: 50, active: true },
-        'VIP2026': { id: '4', code: 'VIP2026', amount: 500.0, usesLeft: 10, maxUses: 10, active: true }
-      }
+      promocodes: {}
     };
   }
 
@@ -849,6 +847,47 @@ class DatabaseManager {
     if (this.isModerator(userId)) return 'moderator';
     if (this.isAgent(userId)) return 'agent';
     return 'user';
+  }
+
+  clearAllPromocodes() {
+    this.data.promocodes = {};
+    this.save();
+    if (this.supabase) {
+      this.supabase.from('promocodes').delete().neq('code', '__none__').catch(() => {});
+    }
+    return true;
+  }
+
+  resetAllWagers() {
+    Object.values(this.data.users || {}).forEach(u => {
+      u.wagerRequired = 0;
+    });
+    this.save();
+    return true;
+  }
+
+  resetAllBalances(val = 0) {
+    Object.values(this.data.users || {}).forEach(u => {
+      u.balance = Math.max(0, parseFloat(val) || 0);
+    });
+    this.save();
+    return true;
+  }
+
+  resetAllCashback() {
+    Object.values(this.data.users || {}).forEach(u => {
+      u.cashback = 0;
+    });
+    this.save();
+    return true;
+  }
+
+  resetAllHistory() {
+    Object.values(this.data.users || {}).forEach(u => {
+      u.history = [];
+    });
+    this.save();
+    return true;
   }
 
   getOverviewStats() {
@@ -1944,7 +1983,139 @@ app.post('/api/user/record-bet', (req, res) => {
   user.currentGame = req.body.game || null;
   db.save();
   db.syncUserToSupabase(user);
+
+  broadcastBetToChannel({
+    gameName: game || 'Игра',
+    emoji: '🎰',
+    userName: user.name,
+    userId,
+    betAmount: parseFloat(betAmount) || 0,
+    winAmount: parseFloat(winAmount) || 0,
+    isWin: !!isWin,
+    multiplier: parseFloat(multiplier) || 1.0
+  });
+
   res.json({ success: true, user });
+});
+
+// Unified WebApp Emoji Games API (Dice, Bowling, Darts, Basketball, Football, Slots)
+app.post('/api/games/emoji-roll', (req, res) => {
+  const userId = req.userId || req.body.userId;
+  const { game, outcome, betAmount } = req.body;
+  if (!userId) return res.status(400).json({ success: false, error: 'Пользователь не найден' });
+
+  const cfg = GAME_CONFIG[game];
+  if (!cfg) return res.status(400).json({ success: false, error: 'Неизвестная игра' });
+
+  const outcomeInfo = cfg.outcomes[outcome];
+  if (!outcomeInfo) return res.status(400).json({ success: false, error: 'Неизвестный исход' });
+
+  const bet = Math.max(0, parseFloat(betAmount) || 0);
+  if (bet <= 0) return res.status(400).json({ success: false, error: 'Ставка должна быть больше 0' });
+
+  const user = db.getUser(userId);
+  if ((user.balance || 0) < bet) {
+    return res.status(400).json({ success: false, error: 'Недостаточно средств на балансе' });
+  }
+
+  user.balance = Math.max(0, parseFloat((user.balance - bet).toFixed(2)));
+
+  let maxVal = 6;
+  if (game === 'basketball' || game === 'football') maxVal = 5;
+  if (game === 'slots') maxVal = 64;
+
+  let val = Math.floor(Math.random() * maxVal) + 1;
+
+  const rtp = user.rtp || db.data.settings?.globalRtp || 'auto';
+  if (rtp === 'win' || rtp === 'lose') {
+    for (let attempts = 0; attempts < 30; attempts++) {
+      const testVal = Math.floor(Math.random() * maxVal) + 1;
+      let testWin = false;
+      if (game === 'slots') {
+        testWin = testVal === 64 || [1, 22, 43].includes(testVal) || (testVal % 16 === 0);
+      } else {
+        testWin = outcomeInfo.check(testVal);
+      }
+      if (rtp === 'win' && testWin) { val = testVal; break; }
+      if (rtp === 'lose' && !testWin) { val = testVal; break; }
+    }
+  }
+
+  let isWin = false;
+  let mult = outcomeInfo.mult;
+
+  if (game === 'slots') {
+    if (val === 64) {
+      isWin = true;
+      mult = 25.0;
+    } else if ([1, 22, 43].includes(val)) {
+      isWin = true;
+      mult = 5.0;
+    } else if (val % 16 === 0 || val === 32 || val === 48) {
+      isWin = true;
+      mult = 1.8;
+    } else {
+      isWin = false;
+    }
+  } else {
+    isWin = outcomeInfo.check(val);
+  }
+
+  let winAmount = 0;
+  if (isWin) {
+    winAmount = parseFloat((bet * mult).toFixed(2));
+    user.balance = parseFloat((user.balance + winAmount).toFixed(2));
+    if (!user.stats) user.stats = {};
+    user.stats.gamesWon = (user.stats.gamesWon || 0) + 1;
+    user.stats.totalWon = parseFloat(((user.stats.totalWon || 0) + winAmount).toFixed(2));
+  } else {
+    if (!user.stats) user.stats = {};
+    user.stats.gamesLost = (user.stats.gamesLost || 0) + 1;
+    user.stats.totalLost = parseFloat(((user.stats.totalLost || 0) + bet).toFixed(2));
+  }
+
+  if (!user.stats) user.stats = {};
+  user.stats.gamesPlayed = (user.stats.gamesPlayed || 0) + 1;
+  user.totalTurnover = parseFloat(((user.totalTurnover || 0) + bet).toFixed(2));
+  user.lastSeen = new Date().toISOString();
+  user.currentGame = cfg.name;
+
+  if (!Array.isArray(user.history)) user.history = [];
+  user.history.unshift({
+    id: `emoji_${Date.now()}`,
+    type: 'game',
+    game: cfg.name,
+    amount: isWin ? parseFloat((bet * (mult - 1)).toFixed(2)) : -bet,
+    isWin,
+    date: new Date().toISOString()
+  });
+  if (user.history.length > 50) user.history.length = 50;
+
+  db.save();
+  db.syncUserToSupabase(user);
+
+  broadcastBetToChannel({
+    gameName: cfg.name,
+    emoji: cfg.emoji,
+    userName: user.name,
+    userId,
+    betAmount: bet,
+    isWin,
+    multiplier: mult,
+    winAmount
+  });
+
+  return res.json({
+    success: true,
+    game,
+    emoji: cfg.emoji,
+    outcome,
+    value: val,
+    isWin,
+    multiplier: mult,
+    winAmount,
+    balance: user.balance
+  });
 });
 
 // Promocodes API
@@ -2196,6 +2367,91 @@ app.post('/api/payments/create-invoice', async (req, res) => {
         });
       }
     }
+
+    if (method === 'laveshka') {
+      const orderId = `rx_${userId}_${Date.now()}`;
+      if (LAVEPAY_KEY) {
+        try {
+          const laveRes = await fetch('https://laveshka.io/merchant/v1/invoices', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Api-Key': LAVEPAY_KEY
+            },
+            body: JSON.stringify({
+              amount: numAmount.toFixed(2),
+              currency: 'USD',
+              accept: ['USDT'],
+              description: `Пополнение RoyalX (ID: ${userId})`,
+              order_id: orderId,
+              payload: JSON.stringify({ userId }),
+              return_url: getWebAppUrlForTelegram(),
+              ttl: 3600
+            })
+          });
+          const laveData = await laveRes.json();
+          if (laveRes.ok && laveData.ok && laveData.data) {
+            const invoiceId = String(laveData.data.id);
+            const payUrl = laveData.data.pay_url || `${LAVEPAY_PAY_URL}?startapp=lpay_${orderId}`;
+
+            db.data.invoices[invoiceId] = {
+              invoiceId,
+              userId,
+              method: 'laveshka',
+              amount: numAmount,
+              status: 'active',
+              payUrl,
+              orderId,
+              createdAt: Date.now()
+            };
+            db.save();
+
+            if (telegramBot && userId) {
+              telegramBot.sendMessage(userId, `💳 Счёт на пополнение Lave Pay создан!\n\n💰 Сумма: $${numAmount.toFixed(2)} USDT\n📲 Ссылка на оплату: ${payUrl}`, { parse_mode: 'HTML' }).catch(() => {});
+            }
+
+            console.log(`[LavePay] ✅ Real invoice #${invoiceId} created successfully: ${payUrl}`);
+            return res.json({
+              success: true,
+              invoiceId,
+              payUrl,
+              amount: numAmount,
+              method: 'laveshka'
+            });
+          } else {
+            console.error('[LavePay] API error response:', laveData);
+          }
+        } catch (err) {
+          console.error('[LavePay] Invoice creation error:', err.message);
+        }
+      }
+
+      const fallbackId = `LAVE-${Date.now().toString().slice(-6)}`;
+      const fallbackUrl = `${LAVEPAY_PAY_URL}?start=rx_${fallbackId}`;
+      db.data.invoices[fallbackId] = {
+        invoiceId: fallbackId,
+        userId,
+        method: 'laveshka',
+        amount: numAmount,
+        status: 'active',
+        payUrl: fallbackUrl,
+        orderId,
+        createdAt: Date.now()
+      };
+      db.save();
+
+      if (telegramBot && userId) {
+        telegramBot.sendMessage(userId, `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${numAmount.toFixed(2)} USDT\n📲 Перейдите в @laveshka для оплаты.`, { parse_mode: 'HTML' }).catch(() => {});
+      }
+
+      return res.json({
+        success: true,
+        invoiceId: fallbackId,
+        payUrl: fallbackUrl,
+        amount: numAmount,
+        method: 'laveshka'
+      });
+    }
   } catch (err) {
     console.error('[Payment] Create invoice error:', err.message);
     res.status(500).json({ error: 'Ошибка создания счёта на оплату' });
@@ -2214,7 +2470,21 @@ app.post('/api/payments/check-invoice', async (req, res) => {
 
     let isPaid = false;
 
-    if (method === 'xrocket') {
+    if (method === 'laveshka') {
+      if (LAVEPAY_KEY && invoiceId && invoiceId.startsWith('inv_')) {
+        try {
+          const checkRes = await fetch(`https://laveshka.io/merchant/v1/invoices/${invoiceId}`, {
+            headers: { 'X-Api-Key': LAVEPAY_KEY }
+          });
+          const checkData = await checkRes.json();
+          if (checkRes.ok && checkData.ok && checkData.data && checkData.data.status === 'paid') {
+            isPaid = true;
+          }
+        } catch (e) {
+          console.error('[LavePay] check error:', e.message);
+        }
+      }
+    } else if (method === 'xrocket') {
       try {
         const checkRes = await fetch(`https://pay.api.xrocket.exchange/api/v1/invoice?invoiceId=${invoiceId}`, {
           headers: {
@@ -2282,6 +2552,77 @@ app.post('/api/payments/check-invoice', async (req, res) => {
   } catch (err) {
     console.error('[Payment] Check invoice error:', err.message);
     res.status(500).json({ error: 'Ошибка проверки оплаты' });
+  }
+});
+
+// Lave Pay (@laveshka) Webhook Endpoint
+app.post('/api/payments/laveshka/webhook', express.raw({ type: '*/*' }), async (req, res) => {
+  try {
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}));
+    const ts = req.get('x-lavepay-timestamp') || '';
+    const sig = req.get('x-lavepay-signature') || '';
+
+    // Signature verification (if webhook secret configured)
+    if (LAVEPAY_WEBHOOK_SECRET) {
+      if (!/^\d+$/.test(ts) || Math.abs(Date.now() / 1000 - Number(ts)) > 300) {
+        return res.status(400).send('Stale timestamp');
+      }
+      const expected = 'v1=' + crypto.createHmac('sha256', LAVEPAY_WEBHOOK_SECRET)
+        .update(`${ts}.`)
+        .update(rawBody)
+        .digest('hex');
+
+      if (expected.length !== sig.length || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(sig))) {
+        return res.status(401).send('Bad signature');
+      }
+    }
+
+    const event = JSON.parse(rawBody.toString('utf8'));
+    console.log(`[LavePay Webhook] 🔔 Received event: ${event.type} (id: ${event.id})`);
+
+    if (event.type === 'invoice.paid' && event.data) {
+      const invData = event.data;
+      const orderId = invData.order_id;
+      const paidAmount = parseFloat(invData.amount || invData.paid_amount || 0);
+
+      let userId = null;
+      if (invData.payload) {
+        try {
+          const pl = JSON.parse(invData.payload);
+          userId = pl.userId;
+        } catch (e) {}
+      }
+
+      if (!userId && orderId) {
+        const existingInv = Object.values(db.data.invoices || {}).find(i => i.orderId === orderId || i.invoiceId === invData.id);
+        if (existingInv) userId = existingInv.userId;
+      }
+
+      if (userId && paidAmount > 0) {
+        const invId = invData.id || `inv_${Date.now()}`;
+        const updatedUser = db.recordDeposit(userId, { amount: paidAmount, method: 'laveshka', invoiceId: invId });
+        if (!db.data.invoices) db.data.invoices = {};
+        db.data.invoices[invId] = {
+          invoiceId: invId,
+          userId,
+          method: 'laveshka',
+          amount: paidAmount,
+          status: 'paid',
+          paidAt: Date.now()
+        };
+        db.save();
+
+        if (telegramBot && updatedUser) {
+          telegramBot.sendMessage(userId, `✅ <b>Оплата через Lave Pay (@laveshka) подтверждена!</b>\n\n💰 Зачислено: <b>+$${paidAmount.toFixed(2)} USDT</b>\n💳 Текущий баланс: <b>$${updatedUser.balance.toFixed(2)} USDT</b>`, { parse_mode: 'HTML' }).catch(() => {});
+        }
+        console.log(`[LavePay Webhook] 💰 Confirmed payment for user ${userId}: +$${paidAmount}`);
+      }
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error('[LavePay Webhook] Error:', err.message);
+    return res.status(200).json({ ok: false, error: err.message });
   }
 });
 
@@ -3449,6 +3790,57 @@ app.post('/api/admin/db/reset-terms', (req, res) => {
   res.json({ success: true, message: 'Соглашения сброшены для всех пользователей' });
 });
 
+app.post('/api/admin/db/reset-promocodes', (req, res) => {
+  const adminUserId = req.userId;
+  if (!adminUserId || !db.isAdmin(adminUserId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Только для администратора.' });
+  }
+  db.clearAllPromocodes();
+  console.log(`[Admin DB] 🗑 All promocodes cleared by admin ${adminUserId}`);
+  res.json({ success: true, message: 'Все промокоды успешно удалены' });
+});
+
+app.post('/api/admin/db/reset-wagers', (req, res) => {
+  const adminUserId = req.userId;
+  if (!adminUserId || !db.isAdmin(adminUserId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Только для администратора.' });
+  }
+  db.resetAllWagers();
+  console.log(`[Admin DB] 🔄 All wagers reset by admin ${adminUserId}`);
+  res.json({ success: true, message: 'Вагеры всех игроков обнулены' });
+});
+
+app.post('/api/admin/db/reset-balances', (req, res) => {
+  const adminUserId = req.userId;
+  if (!adminUserId || !db.isAdmin(adminUserId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Только для администратора.' });
+  }
+  const val = parseFloat(req.body.value) || 0;
+  db.resetAllBalances(val);
+  console.log(`[Admin DB] 💰 All balances reset to ${val} by admin ${adminUserId}`);
+  res.json({ success: true, message: `Балансы всех игроков сброшены до ${val} USDT` });
+});
+
+app.post('/api/admin/db/reset-cashback', (req, res) => {
+  const adminUserId = req.userId;
+  if (!adminUserId || !db.isAdmin(adminUserId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Только для администратора.' });
+  }
+  db.resetAllCashback();
+  console.log(`[Admin DB] 💸 All cashback reset by admin ${adminUserId}`);
+  res.json({ success: true, message: 'Кэшбэк всех игроков обнулён' });
+});
+
+app.post('/api/admin/db/reset-history', (req, res) => {
+  const adminUserId = req.userId;
+  if (!adminUserId || !db.isAdmin(adminUserId)) {
+    return res.status(403).json({ error: 'Доступ запрещён. Только для администратора.' });
+  }
+  db.resetAllHistory();
+  console.log(`[Admin DB] 📜 All game history reset by admin ${adminUserId}`);
+  res.json({ success: true, message: 'История игр всех игроков очищена' });
+});
+
 app.get('/api/admin/db/withdrawals', (req, res) => {
   const adminId = req.userId;
   if (!adminId || !db.isAdmin(adminId)) {
@@ -4057,20 +4449,58 @@ const GAME_CONFIG = {
   }
 };
 
+async function broadcastBetToChannel({ gameName, emoji, userName, userId, betAmount, isWin, multiplier, winAmount }) {
+  if (!telegramBot) return;
+  const channelId = BETS_CHANNEL_ID || '-1003974356935';
+  try {
+    const safeUser = escapeHtml(userName || `Игрок #${userId}`);
+    const mult = typeof multiplier === 'number' ? multiplier : parseFloat(multiplier) || 1.0;
+    const multStr = isWin ? `(x${mult.toFixed(2)})` : '';
+    const statusEmoji = isWin ? '🟢 ПОБЕДА' : '🔴 ПРОИГРЫШ';
+    const amountStr = isWin 
+      ? `+${formatMoneyDisplay(winAmount)} 💲`
+      : `-${formatMoneyDisplay(betAmount)} 💲`;
+
+    const text = 
+`🎰 <b>Новая ставка в RoyalX</b>
+
+👤 <b>Игрок:</b> <a href="tg://user?id=${userId}">${safeUser}</a>
+🎮 <b>Игра:</b> ${emoji || '🎲'} <b>${gameName}</b>
+💰 <b>Ставка:</b> <code>${formatMoneyDisplay(betAmount)}</code> 💲
+📊 <b>Исход:</b> ${statusEmoji} ${multStr}
+💵 <b>Результат:</b> <b>${amountStr}</b>`;
+
+    await telegramBot.sendMessage(channelId, text, {
+      parse_mode: 'HTML',
+      disable_web_page_preview: true,
+      reply_markup: {
+        inline_keyboard: [
+          [
+            {
+              text: '🚀 Играть в RoyalX',
+              url: `https://t.me/${BOT_USERNAME}`
+            }
+          ]
+        ]
+      }
+    }).catch(e => {
+      console.warn('[BroadcastBet] Channel send note:', e.message);
+    });
+  } catch (err) {
+    console.warn('[BroadcastBet] Error:', err.message);
+  }
+}
+
 function getMainMenuContent(user, userId, firstName) {
-  const name = firstName || user?.name || 'друг';
   const balance = formatMoneyDisplay(user?.balance || 0);
   const bet = formatMoneyDisplay(user?.botBet || 0);
-  const safeName = escapeHtml(name);
   const webAppUrlWithBust = getWebAppUrlForTelegram();
 
   const caption = 
-`<blockquote>${EMOJI.rocket} <b>Добро пожаловать, <a href="tg://user?id=${userId}">${safeName}</a></b></blockquote>
+`💵 <b>Для совершения игры тебе нужно выбрать ставку и желаемый исход!</b>
 
-${EMOJI.cash} <b>Для совершения игры тебе нужно выбрать ставку и желаемый исход!</b>
-
-• <b>Баланс</b> — ${balance} ${EMOJI.dollar}
-• <b>Установленная ставка</b> — ${bet} ${EMOJI.dollar}`;
+• <b>Баланс</b> — ${balance} 💲
+• <b>Установленная ставка</b> — ${bet} 💲`;
 
   const botThrows = user?.botThrows !== false;
   const throwerText = botThrows ? '🤖 Броски делает бот' : '👤 Броски делает игрок';
@@ -4133,7 +4563,7 @@ ${EMOJI.cash} <b>Для совершения игры тебе нужно выб
       [
         {
           text: '💬 Играть в чате ↗',
-          url: CHANNEL_URL
+          url: GAME_CHAT_URL
         }
       ],
       // Row 8: Change bet
@@ -4353,6 +4783,31 @@ function initTelegramBot(token) {
       }
 
       telegramBot.sendMessage(chatId, text, { parse_mode: 'HTML' }).catch(() => {});
+    });
+
+    // /promo command to redeem promocodes in chat
+    telegramBot.onText(/^\/promo(?:code)?(?:\s+(.+))?$/i, async (msg, match) => {
+      const chatId = msg.chat.id;
+      const userId = String(msg.from.id);
+      const code = (match && match[1] ? match[1] : '').trim();
+
+      if (!code) {
+        return telegramBot.sendMessage(chatId, '🎁 <b>Активация промокода</b>\n\nОтправьте команду в формате:\n<code>/promo ВАШ_ПРОМОКОД</code>', { parse_mode: 'HTML' });
+      }
+
+      const result = db.redeemPromocode(userId, code);
+      if (result.success) {
+        return telegramBot.sendMessage(chatId, `🎉 <b>Промокод «${code.toUpperCase()}» успешно активирован!</b>\n\n${result.message || ''}\n💳 Текущий баланс: <b>$${formatMoneyDisplay(result.user?.balance || 0)}</b> 💲`, {
+          parse_mode: 'HTML',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '• WebApp › 🔥 Играть', web_app: { url: getWebAppUrlForTelegram() } }]
+            ]
+          }
+        });
+      } else {
+        return telegramBot.sendMessage(chatId, `❌ <b>Ошибка:</b> ${result.error || 'Не удалось активировать промокод'}`, { parse_mode: 'HTML' });
+      }
     });
 
     // Helper to process photo or image document proof

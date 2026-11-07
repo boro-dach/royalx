@@ -647,6 +647,36 @@ export default function AdminModal() {
     } catch (e) { showToast('Ошибка сети', true); }
   };
 
+  const handleBatchReset = async (type) => {
+    const endpoints = {
+      promocodes: { url: '/api/admin/db/reset-promocodes', msg: 'Все промокоды удалены', confirm: 'Удалить все промокоды?' },
+      wagers: { url: '/api/admin/db/reset-wagers', msg: 'Вагеры всех игроков обнулены', confirm: 'Обнулить вагеры у ВСЕХ игроков?' },
+      balances: { url: '/api/admin/db/reset-balances', msg: 'Балансы всех игроков сброшены', confirm: 'Сбросить балансы ВСЕХ игроков до 0?' },
+      cashback: { url: '/api/admin/db/reset-cashback', msg: 'Кэшбэк всех игроков обнулён', confirm: 'Обнулить кэшбэк у ВСЕХ игроков?' },
+      history: { url: '/api/admin/db/reset-history', msg: 'История игр всех игроков очищена', confirm: 'Очистить историю игр ВСЕХ игроков?' }
+    };
+    const action = endpoints[type];
+    if (!action) return;
+    if (!window.confirm(action.confirm)) return;
+
+    try {
+      const res = await fetch(action.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() }
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✅ ${action.msg}`);
+        loadDbStats();
+        loadRawDb();
+      } else {
+        showToast(data.error || 'Ошибка сброса', true);
+      }
+    } catch (e) {
+      showToast('Ошибка сети при выполнении сброса', true);
+    }
+  };
+
   // Filter users by search
   const filteredUsers = usersList.filter(u => {
     if (!searchQuery.trim()) return true;
@@ -1515,6 +1545,61 @@ export default function AdminModal() {
                               </div>
                             </div>
                           )}
+
+                          {/* Batch Reset Quick Actions */}
+                          <div style={{
+                            background: 'rgba(255, 77, 77, 0.05)',
+                            border: '1px solid rgba(255, 77, 77, 0.25)',
+                            borderRadius: '10px',
+                            padding: '12px',
+                            marginBottom: '12px'
+                          }}>
+                            <div style={{ fontSize: '12px', fontWeight: 700, color: '#ff4d4d', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>⚠️ Пакетные действия с БД (Сброс и Очистка)</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '6px' }}>
+                              <button
+                                type="button"
+                                className="preset-btn"
+                                style={{ padding: '7px 8px', fontSize: '11px', color: '#ffcc00', borderColor: 'rgba(255, 204, 0, 0.3)' }}
+                                onClick={() => handleBatchReset('promocodes')}
+                              >
+                                🗑 Сбросить промокоды
+                              </button>
+                              <button
+                                type="button"
+                                className="preset-btn"
+                                style={{ padding: '7px 8px', fontSize: '11px', color: '#ffcc00', borderColor: 'rgba(255, 204, 0, 0.3)' }}
+                                onClick={() => handleBatchReset('wagers')}
+                              >
+                                🔄 Обнулить вагеры
+                              </button>
+                              <button
+                                type="button"
+                                className="preset-btn"
+                                style={{ padding: '7px 8px', fontSize: '11px', color: '#ff4d4d', borderColor: 'rgba(255, 77, 77, 0.3)' }}
+                                onClick={() => handleBatchReset('balances')}
+                              >
+                                💰 Сбросить балансы (0)
+                              </button>
+                              <button
+                                type="button"
+                                className="preset-btn"
+                                style={{ padding: '7px 8px', fontSize: '11px', color: '#00e699', borderColor: 'rgba(0, 230, 153, 0.3)' }}
+                                onClick={() => handleBatchReset('cashback')}
+                              >
+                                💸 Обнулить кэшбэк
+                              </button>
+                              <button
+                                type="button"
+                                className="preset-btn"
+                                style={{ gridColumn: 'span 2', padding: '7px 8px', fontSize: '11px', color: '#8a8f99', borderColor: 'rgba(255, 255, 255, 0.1)' }}
+                                onClick={() => handleBatchReset('history')}
+                              >
+                                📜 Очистить историю игр
+                              </button>
+                            </div>
+                          </div>
 
                           {/* Raw JSON View */}
                           <div style={{ background: '#090a0f', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '8px', padding: '10px', maxHeight: '350px', overflowY: 'auto' }}>

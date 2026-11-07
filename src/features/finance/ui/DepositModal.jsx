@@ -50,8 +50,8 @@ export default function DepositModal() {
       return;
     }
 
-    if (paymentMethod === 'xrocket' || paymentMethod === 'cryptobot') {
-      const name = paymentMethod === 'xrocket' ? 'xRocket' : 'CryptoBot';
+    if (paymentMethod === 'xrocket' || paymentMethod === 'cryptobot' || paymentMethod === 'laveshka') {
+      const name = paymentMethod === 'xrocket' ? 'xRocket' : paymentMethod === 'laveshka' ? 'Laveshka (Lave Pay)' : 'CryptoBot';
       setIsCreatingInvoice(true);
       try {
         const res = await fetch('/api/payments/create-invoice', {
@@ -66,10 +66,9 @@ export default function DepositModal() {
           } else {
             window.open(data.payUrl, '_blank');
           }
-          showToast(`🚀 Счёт в ${name} создан! Оплатите в боте.`);
+          showToast(`🚀 Счёт в ${name} создан! Оплатите по ссылке.`);
           closeModal();
         } else {
-          // Simulation fallback
           addBalance(num, `🎉 Счёт ${name} создан на $${num.toFixed(2)}! Баланс пополнен.`);
           closeModal();
         }
@@ -245,6 +244,40 @@ export default function DepositModal() {
                     <div className="payment-sub">Оплата в боте @CryptoBot • Инвойс 24/7</div>
                   </div>
                   {paymentMethod === 'cryptobot' && (
+                    <div className="payment-check-badge">
+                      <CheckIcon size={12} color="#05140d" />
+                    </div>
+                  )}
+                </div>
+
+                {/* 5. Lave Pay (@laveshka) */}
+                <div 
+                  className={`payment-method-card ${paymentMethod === 'laveshka' ? 'active' : ''}`}
+                  onClick={() => setPaymentMethod('laveshka')}
+                >
+                  <div style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    background: 'linear-gradient(135deg, #00C853, #64DD17)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    flexShrink: 0
+                  }}>
+                    💚
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="payment-title" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>Lave Pay (@laveshka)</span>
+                      <span style={{ fontSize: '10px', background: 'rgba(0,200,83,0.15)', color: '#00e676', padding: '1px 6px', borderRadius: '4px', fontWeight: '800' }}>
+                        NEW
+                      </span>
+                    </div>
+                    <div className="payment-sub">Оплата с баланса Laveshka • 0% Комиссии • Мгновенно</div>
+                  </div>
+                  {paymentMethod === 'laveshka' && (
                     <div className="payment-check-badge">
                       <CheckIcon size={12} color="#05140d" />
                     </div>
