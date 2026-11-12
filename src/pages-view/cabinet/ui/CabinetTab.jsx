@@ -13,7 +13,18 @@ import {
 } from '@/shared/ui/Icons';
 
 export default function CabinetTab() {
-  const { tgUser, balance, setActiveModal, getCurrentRankInfo, totalTurnover, isAdmin, logout } = useApp();
+  const { 
+    tgUser, 
+    balance, 
+    setActiveModal, 
+    getCurrentRankInfo, 
+    totalTurnover, 
+    isAdmin, 
+    logout,
+    isStandalone,
+    setIsAuthModalOpen,
+    setAuthModalMode
+  } = useApp();
   const { current, next, progressPercent } = getCurrentRankInfo();
 
   const isUserAdmin = Boolean(isAdmin);
@@ -236,31 +247,80 @@ export default function CabinetTab() {
         </div>
       </div>
 
-      {/* Telegram Session Status & Security */}
+      {/* Security & Auth Section */}
       <div style={{ marginTop: '16px', marginBottom: '32px' }}>
         <div style={{ fontSize: '11px', fontWeight: '700', color: '#8a8f99', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px', paddingLeft: '4px' }}>
           Безопасность и авторизация
         </div>
         <div className="menu-list">
+          {/* Auth method status */}
           <div className="menu-item" style={{ cursor: 'default' }}>
             <div className="menu-item-left">
-              <span className="menu-icon-svg" style={{ color: '#00efaa' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00efaa" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <span className="menu-icon-svg" style={{ color: isStandalone ? '#38bdf8' : '#00efaa' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={isStandalone ? '#38bdf8' : '#00efaa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                   <polyline points="9 12 11 14 15 10"></polyline>
                 </svg>
               </span>
               <div>
-                <div className="menu-title">Telegram Авторизация</div>
-                <div className="menu-sub">Автоматический вход по initData</div>
+                <div className="menu-title">{isStandalone ? 'Вход по номеру телефона' : 'Telegram Авторизация'}</div>
+                <div className="menu-sub">
+                  {isStandalone
+                    ? (tgUser?.phone ? `Привязан: ${tgUser.phone}` : 'Аккаунт с паролем')
+                    : 'Автоматический вход по initData'}
+                </div>
               </div>
             </div>
             <div className="menu-item-right">
-              <span style={{ fontSize: '11px', color: '#00efaa', background: 'rgba(0, 239, 170, 0.1)', padding: '3px 8px', borderRadius: '6px', fontWeight: '600' }}>
+              <span style={{ fontSize: '11px', color: isStandalone ? '#38bdf8' : '#00efaa', background: isStandalone ? 'rgba(56,189,248,0.1)' : 'rgba(0,239,170,0.1)', padding: '3px 8px', borderRadius: '6px', fontWeight: '600' }}>
                 Активна
               </span>
             </div>
           </div>
+
+          {/* Phone bind CTA: show for TG users without phone */}
+          {!isStandalone && !tgUser?.phone && (
+            <div className="menu-item" onClick={() => { setAuthModalMode('bind'); setIsAuthModalOpen(true); }}>
+              <div className="menu-item-left">
+                <span className="menu-icon-svg" style={{ color: '#8a8f99' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8a8f99" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                    <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                  </svg>
+                </span>
+                <div>
+                  <div className="menu-title">Привязать номер телефона</div>
+                  <div className="menu-sub">Для входа на сайт с любого устройства</div>
+                </div>
+              </div>
+              <div className="menu-item-right">
+                <ChevronRightIcon size={16} color="#575c66" />
+              </div>
+            </div>
+          )}
+
+          {/* Phone already bound indicator */}
+          {!isStandalone && tgUser?.phone && (
+            <div className="menu-item" style={{ cursor: 'default' }}>
+              <div className="menu-item-left">
+                <span className="menu-icon-svg" style={{ color: '#38bdf8' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                    <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                  </svg>
+                </span>
+                <div>
+                  <div className="menu-title">Веб-доступ активен</div>
+                  <div className="menu-sub">{tgUser.phone}</div>
+                </div>
+              </div>
+              <div className="menu-item-right">
+                <span style={{ fontSize: '11px', color: '#38bdf8', background: 'rgba(56,189,248,0.1)', padding: '3px 8px', borderRadius: '6px', fontWeight: '600' }}>✓</span>
+              </div>
+            </div>
+          )}
+
+          {/* Logout */}
           <div className="menu-item" onClick={logout}>
             <div className="menu-item-left">
               <span className="menu-icon-svg" style={{ color: '#ff6b6b' }}>
@@ -270,8 +330,12 @@ export default function CabinetTab() {
                 </svg>
               </span>
               <div>
-                <div className="menu-title" style={{ color: '#ff6b6b' }}>Обновить сессию</div>
-                <div className="menu-sub">Сбросить и переподключить сессию</div>
+                <div className="menu-title" style={{ color: '#ff6b6b' }}>
+                  {isStandalone ? 'Выйти из аккаунта' : 'Обновить сессию'}
+                </div>
+                <div className="menu-sub">
+                  {isStandalone ? 'Переключиться на другой аккаунт' : 'Сбросить и переподключить сессию'}
+                </div>
               </div>
             </div>
             <div className="menu-item-right">

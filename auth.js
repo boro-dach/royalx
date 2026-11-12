@@ -82,7 +82,25 @@ export function verifyInitData(initData, botToken, maxAgeSec = 24 * 3600) {
   }
 }
 
-// 2. Password Hashing (PBKDF2 with SHA-512)
+// 2. Phone Number Normalization & Validation (E.164 Standard)
+export function normalizePhone(rawPhone) {
+  if (!rawPhone || typeof rawPhone !== 'string') return '';
+  let cleaned = rawPhone.trim().replace(/[^\d+]/g, '');
+  if (!cleaned) return '';
+  if (cleaned.startsWith('8') && cleaned.length === 11) {
+    cleaned = '+7' + cleaned.slice(1);
+  } else if (!cleaned.startsWith('+')) {
+    cleaned = '+' + cleaned;
+  }
+  return cleaned;
+}
+
+export function isValidPhone(phone) {
+  const norm = normalizePhone(phone);
+  return /^\+\d{10,15}$/.test(norm);
+}
+
+// 3. Password Hashing (PBKDF2 with SHA-512)
 export function hashPassword(password) {
   if (!password || typeof password !== 'string') return '';
   const salt = crypto.randomBytes(16).toString('hex');
@@ -101,12 +119,12 @@ export function verifyPassword(password, storedHash) {
   }
 }
 
-// 3. Cryptographically Secure Random Opaque Session Token (Without JWT)
+// 4. Cryptographically Secure Random Opaque Session Token (Without JWT)
 export function generateSessionToken() {
   return 'sess_' + crypto.randomBytes(32).toString('hex');
 }
 
-// 4. Session Store Helpers
+// 5. Session Store Helpers
 export async function createSession(db, userId, userAgent = '', expiresInDays = 30) {
   const token = generateSessionToken();
   const createdAt = new Date();

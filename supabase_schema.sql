@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS public.users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL DEFAULT 'Пользователь',
   username TEXT,
+  phone TEXT UNIQUE,
+  telegram_id TEXT,
+  is_phone_verified BOOLEAN NOT NULL DEFAULT false,
   password_hash TEXT,
   balance NUMERIC(15, 2) NOT NULL DEFAULT 0.00 CHECK (balance >= 0),
   total_turnover NUMERIC(15, 2) NOT NULL DEFAULT 0.00 CHECK (total_turnover >= 0),
@@ -231,3 +234,14 @@ BEGIN
 EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
+
+-- ====================================================================
+-- 10. MIGRATIONS FOR EXISTING DATABASES
+-- Run this block in Supabase SQL editor if upgrading an existing installation:
+-- ====================================================================
+-- ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone TEXT;
+-- ALTER TABLE public.users ADD COLUMN IF NOT EXISTS telegram_id TEXT;
+-- ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_phone_verified BOOLEAN NOT NULL DEFAULT false;
+-- ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+-- CREATE UNIQUE INDEX IF NOT EXISTS idx_users_phone ON public.users(phone) WHERE phone IS NOT NULL;
+

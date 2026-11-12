@@ -23,6 +23,7 @@ import RanksModal from './pages-view/ranks/ui/RanksModal';
 import AdminModal from './features/admin/ui/AdminModal';
 import TermsModal from './features/auth/ui/TermsModal';
 import SubscriptionModal from './features/auth/ui/SubscriptionModal';
+import AuthModal from './features/auth/ui/AuthModal';
 import GameOverlay from './widgets/game-overlay/ui/GameOverlay';
 import Toast from './shared/ui/Toast';
 import { APP_CONFIG } from './shared/config';
@@ -64,6 +65,7 @@ export default function App() {
       <GameOverlay />
       <TermsModal />
       <SubscriptionModal />
+      <AuthModal />
 
       {/* Minimalist Toast Notifications */}
       <Toast toast={toast} />

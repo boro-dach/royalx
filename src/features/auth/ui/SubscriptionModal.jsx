@@ -11,7 +11,8 @@ export default function SubscriptionModal() {
     isSubscribed, 
     checkSubscription, 
     isAdmin, 
-    tgUser 
+    tgUser,
+    isAuthModalOpen
   } = useApp();
 
   const [checking, setChecking] = useState(false);
@@ -37,6 +38,9 @@ export default function SubscriptionModal() {
   // 4. Admins or already subscribed users bypass the gate
   const isUserAdmin = Boolean(isAdmin);
   if (isSubscribed === true || isUserAdmin) return null;
+
+  // 5. Don't show subscription gate while auth modal is open (standalone login flow)
+  if (isAuthModalOpen) return null;
 
   const handleOpenLink = (url) => (e) => {
     e.preventDefault();

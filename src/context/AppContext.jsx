@@ -170,7 +170,14 @@ export function AppProvider({ children }) {
     }
   });
 
+  const [isStandalone, setIsStandalone] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return !Boolean(window.Telegram?.WebApp?.initData);
+    }
+    return false;
+  });
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState('login');
 
   const getAuthHeaders = () => {
     const token = sessionToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('rx_session_token') : '');
@@ -197,6 +204,12 @@ export function AppProvider({ children }) {
     if (u.agreedToTerms !== undefined) setHasAgreedToTerms(Boolean(u.agreedToTerms));
     if (u.isSubscribed !== undefined) setIsSubscribed(isDevEnv || Boolean(u.isSubscribed));
     if (isAdminFlag !== undefined) setIsAdmin(isDevEnv || Boolean(isAdminFlag));
+    if (u.phone !== undefined) {
+      setTgUser(prev => ({
+        ...prev,
+        phone: u.phone || null
+      }));
+    }
 
     const stats = {
       totalDeposits: u.totalDeposited || 0,
@@ -265,9 +278,11 @@ export function AppProvider({ children }) {
         }
 
         let token = sessionToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('rx_session_token') : '');
+        let hasActiveSession = false;
 
         // 1. Primary Auto-Auth: If Telegram initData is available -> ALWAYS authenticate with it automatically
         if (rawInitData) {
+          setIsStandalone(false);
           try {
             const authRes = await fetch('/api/auth/telegram', {
               method: 'POST',
@@ -281,6 +296,7 @@ export function AppProvider({ children }) {
               try { localStorage.setItem('rx_session_token', token); } catch(e){}
               if (!isCancelled && authData.user) {
                 applyServerUserData(authData.user, authData.isAdmin);
+                hasActiveSession = true;
               }
               // Handle referral start_param
               const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param || '';
@@ -300,6 +316,8 @@ export function AppProvider({ children }) {
           } catch (e) {
             console.warn('[AutoAuth] Telegram auth note:', e);
           }
+        } else {
+          setIsStandalone(true);
         }
 
         // 2. If existing valid session token is stored, verify via /api/auth/me
@@ -312,10 +330,17 @@ export function AppProvider({ children }) {
               const meData = await meRes.json();
               if (meData.success && meData.user && !isCancelled) {
                 applyServerUserData(meData.user, meData.isAdmin);
+                hasActiveSession = true;
                 return;
               }
             }
           } catch (e) {}
+        }
+
+        // 3. Standalone mode & unauthenticated: prompt AuthModal
+        if (!hasActiveSession && !rawInitData && !isDevEnv) {
+          setIsAuthModalOpen(true);
+          setAuthModalMode('login');
         }
       } finally {
         if (!isCancelled) {
@@ -1053,6 +1078,100 @@ export function AppProvider({ children }) {
     }
   };
 
+  const phoneLogin = async (phone, password) => {
+    try {
+      const res = await fetch('/api/auth/phone/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password })
+      });
+      const data = await res.json();
+      if (data.success && data.token) {
+        localStorage.setItem('rx_session_token', data.token);
+        setSessionToken(data.token);
+        if (data.user) {
+          applyServerUserData(data.user, data.isAdmin);
+          const u = data.user;
+          const uObj = {
+            id: String(u.id),
+            name: u.name || (u.phone ? `+${u.phone.replace(/[^\d]/g, '')}` : 'Пользователь'),
+            phone: u.phone || null,
+            photoUrl: null,
+            initials: (u.name || 'RX').slice(0, 2).toUpperCase()
+          };
+          setTgUser(uObj);
+          try { localStorage.setItem('rx_last_tg_user', JSON.stringify(uObj)); } catch(e){}
+        }
+        setIsAdmin(Boolean(data.isAdmin));
+        setIsAuthModalOpen(false);
+        showToast('Вход выполнен успешно! 🎉');
+        return { success: true, user: data.user };
+      }
+      return { success: false, error: data.error || 'Ошибка входа' };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  };
+
+  const phoneRegister = async ({ phone, password, name, referrerId }) => {
+    try {
+      const res = await fetch('/api/auth/phone/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password, name, referrerId })
+      });
+      const data = await res.json();
+      if (data.success && data.token) {
+        localStorage.setItem('rx_session_token', data.token);
+        setSessionToken(data.token);
+        if (data.user) {
+          applyServerUserData(data.user, data.isAdmin);
+          const u = data.user;
+          const uObj = {
+            id: String(u.id),
+            name: u.name || (u.phone ? `+${u.phone.replace(/[^\d]/g, '')}` : 'Пользователь'),
+            phone: u.phone || null,
+            photoUrl: null,
+            initials: (u.name || 'RX').slice(0, 2).toUpperCase()
+          };
+          setTgUser(uObj);
+          try { localStorage.setItem('rx_last_tg_user', JSON.stringify(uObj)); } catch(e){}
+        }
+        setIsAdmin(Boolean(data.isAdmin));
+        setIsAuthModalOpen(false);
+        showToast('Регистрация завершена! 🚀');
+        return { success: true, user: data.user };
+      }
+      return { success: false, error: data.error || 'Ошибка регистрации' };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  };
+
+  const phoneBind = async (phone, password) => {
+    try {
+      const res = await fetch('/api/auth/phone/bind', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ phone, password })
+      });
+      const data = await res.json();
+      if (data.success && data.user) {
+        applyServerUserData(data.user, isAdmin);
+        setTgUser(prev => ({
+          ...prev,
+          phone: data.user.phone
+        }));
+        setIsAuthModalOpen(false);
+        showToast('Номер и пароль успешно привязаны! 📱');
+        return { success: true, user: data.user };
+      }
+      return { success: false, error: data.error || 'Ошибка привязки' };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  };
+
   const logout = async () => {
     const token = sessionToken || (typeof localStorage !== 'undefined' ? localStorage.getItem('rx_session_token') : '');
     if (token) {
@@ -1068,10 +1187,18 @@ export function AppProvider({ children }) {
       localStorage.removeItem('rx_profile_cache');
     } catch (e) {}
     setSessionToken('');
-    showToast('Сессия обновлена 🔄');
-    setTimeout(() => {
-      window.location.reload();
-    }, 400);
+    setBalance(0);
+    setHistoryItems([]);
+    if (isStandalone) {
+      setIsAuthModalOpen(true);
+      setAuthModalMode('login');
+      showToast('Вы вышли из аккаунта');
+    } else {
+      showToast('Сессия обновлена 🔄');
+      setTimeout(() => {
+        window.location.reload();
+      }, 400);
+    }
   };
 
   return (
@@ -1138,10 +1265,16 @@ export function AppProvider({ children }) {
       setIsAppReady,
       userRtp,
       setUserRtp,
-      // Authentication (Non-JWT)
+      // Authentication (Non-JWT & Phone Auth)
       sessionToken,
+      isStandalone,
       isAuthModalOpen,
       setIsAuthModalOpen,
+      authModalMode,
+      setAuthModalMode,
+      phoneLogin,
+      phoneRegister,
+      phoneBind,
       login,
       register,
       devLogin,

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import TelegramBot from 'node-telegram-bot-api';
 import { spawn, execSync } from 'child_process';
 import fs from 'fs';
-import { verifyInitData, hashPassword, verifyPassword, createSession, validateSession, destroySession, authMiddleware, adminMiddleware } from './auth.js';
+import { verifyInitData, hashPassword, verifyPassword, createSession, validateSession, destroySession, authMiddleware, adminMiddleware, normalizePhone, isValidPhone } from './auth.js';
 import { getSupabaseClient, isSupabaseConfigured, toSnakeCase, toCamelCase } from './supabaseClient.js';
 import { EMOJI, ORDER_EMOJIS, tgEmoji } from './telegramEmojis.js';
 
@@ -689,7 +689,10 @@ class DatabaseManager {
             wagerRequired: parseFloat(u.wagerRequired || 0),
             depositBonusPercent: parseFloat(u.depositBonusPercent || 0),
             usedPromos: Array.isArray(u.usedPromos) ? u.usedPromos : [],
-            history: Array.isArray(u.history) ? u.history : []
+            history: Array.isArray(u.history) ? u.history : [],
+            phone: u.phone || null,
+            telegramId: u.telegramId || null,
+            isPhoneVerified: Boolean(u.isPhoneVerified)
           };
         }
         console.log(`[DB] 📥 Hydrated ${usersRows.length} users from Supabase.`);
@@ -1060,6 +1063,9 @@ class DatabaseManager {
         id: String(user.id),
         name: user.name || 'Пользователь',
         username: user.username || null,
+        phone: user.phone || null,
+        telegramId: user.telegramId || null,
+        isPhoneVerified: Boolean(user.isPhoneVerified),
         passwordHash: user.passwordHash || null,
         balance: parseFloat(user.balance || 0),
         totalTurnover: parseFloat(user.totalTurnover || 0),
@@ -1270,6 +1276,87 @@ class DatabaseManager {
     return ok ? user : null;
   }
 
+  // Standalone Phone + Password Auth Helpers
+  findUserByPhone(rawPhone) {
+    const clean = normalizePhone(rawPhone);
+    if (!clean) return null;
+    return Object.values(this.data.users || {}).find(u =>
+      u.phone && normalizePhone(u.phone) === clean
+    ) || null;
+  }
+
+  async registerUserWithPhone({ phone, password, name, referrerId }) {
+    const cleanPhone = normalizePhone(phone);
+    const id = `u_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const passwordHash = hashPassword(password);
+    const user = {
+      id,
+      name: (name && String(name).trim()) ? String(name).trim() : `Игрок ${cleanPhone.slice(-4)}`,
+      username: null,
+      phone: cleanPhone,
+      passwordHash,
+      isPhoneVerified: false,
+      telegramId: null,
+      referrerId: referrerId ? String(referrerId) : null,
+      balance: 0.00,
+      cashback: 0.00,
+      wagerRequired: 0.00,
+      depositBonusPercent: 0,
+      totalTurnover: 0.00,
+      totalDeposited: 0.00,
+      totalWithdrawn: 0.00,
+      gamesPlayed: 0,
+      gamesWon: 0,
+      referralsCount: 0,
+      referralEarned: 0.00,
+      rtp: 'auto',
+      isBanned: false,
+      agreedToTerms: false,
+      isSubscribed: false,
+      history: [],
+      usedPromos: []
+    };
+
+    if (referrerId && this.data.users[referrerId]) {
+      this.data.users[referrerId].referralsCount = (this.data.users[referrerId].referralsCount || 0) + 1;
+      this.syncUserToSupabase(this.data.users[referrerId]).catch(() => {});
+    }
+
+    this.data.users[id] = user;
+    this.save();
+    await this.syncUserToSupabase(user);
+    console.log(`[PhoneAuth] 📱 New web user registered with phone: ${cleanPhone} (ID: ${id})`);
+    return user;
+  }
+
+  verifyUserPhonePassword(rawPhone, password) {
+    const user = this.findUserByPhone(rawPhone);
+    if (!user || !user.passwordHash) return null;
+    const ok = verifyPassword(password, user.passwordHash);
+    return ok ? user : null;
+  }
+
+  async bindPhoneToUser(userId, rawPhone, password) {
+    const cleanPhone = normalizePhone(rawPhone);
+    const id = String(userId || '').trim();
+    const user = this.getUser(id);
+    if (!user) return { success: false, error: 'Пользователь не найден' };
+
+    const existing = this.findUserByPhone(cleanPhone);
+    if (existing && String(existing.id) !== id) {
+      return { success: false, error: 'Этот номер телефона уже привязан к другому аккаунту' };
+    }
+
+    user.phone = cleanPhone;
+    if (password) {
+      user.passwordHash = hashPassword(password);
+    }
+    this.save();
+    await this.syncUserToSupabase(user);
+    console.log(`[PhoneAuth] 🔗 User ${id} bound phone ${cleanPhone} to their profile`);
+    return { success: true, user };
+  }
+
   redeemPromocode(userId, rawCode) {
     const code = String(rawCode || '').trim().toUpperCase();
     if (!this.data.promocodes) this.data.promocodes = {};
@@ -1385,6 +1472,9 @@ class DatabaseManager {
     if (this.data.users[id].isBanned === undefined) this.data.users[id].isBanned = false;
     if (this.data.users[id].agreedToTerms === undefined) this.data.users[id].agreedToTerms = false;
     if (this.data.users[id].isSubscribed === undefined) this.data.users[id].isSubscribed = false;
+    if (this.data.users[id].phone === undefined) this.data.users[id].phone = null;
+    if (this.data.users[id].telegramId === undefined) this.data.users[id].telegramId = id.startsWith('u_') ? null : id;
+    if (this.data.users[id].isPhoneVerified === undefined) this.data.users[id].isPhoneVerified = false;
     if (this.data.users[id].botBet === undefined) this.data.users[id].botBet = 0.00;
     if (this.data.users[id].botThrows === undefined) this.data.users[id].botThrows = true;
     if (this.data.users[id].netProfit === undefined) {
@@ -1624,6 +1714,10 @@ app.use(authMiddleware(db, {
     '/api/auth/telegram',
     '/api/auth/register',
     '/api/auth/login',
+    '/api/auth/phone/register',
+    '/api/auth/phone/login',
+    '/api/auth/phone/send-otp',
+    '/api/auth/phone/verify-otp',
     '/api/admin/check',
     '/api/subscription/check',
     '/api/subscription/status',
@@ -1750,6 +1844,120 @@ app.post('/api/auth/login', async (req, res) => {
     token: session.token,
     user,
     isAdmin: db.isAdmin(user.id)
+  });
+});
+
+// Phone + Password Register (Standalone Web & Future SMS OTP Ready)
+app.post('/api/auth/phone/register', async (req, res) => {
+  const { phone, password, name, referrerId } = req.body;
+  if (!phone || !password) {
+    return res.status(400).json({ success: false, error: 'Номер телефона и пароль обязательны' });
+  }
+
+  const cleanPhone = normalizePhone(phone);
+  if (!isValidPhone(cleanPhone)) {
+    return res.status(400).json({ success: false, error: 'Некорректный номер телефона. Введите в международном формате (например, +79991234567)' });
+  }
+
+  if (String(password).length < 6) {
+    return res.status(400).json({ success: false, error: 'Пароль должен содержать не менее 6 символов' });
+  }
+
+  const existing = db.findUserByPhone(cleanPhone);
+  if (existing) {
+    return res.status(400).json({ success: false, error: 'Пользователь с таким номером телефона уже зарегистрирован' });
+  }
+
+  const user = await db.registerUserWithPhone({
+    phone: cleanPhone,
+    password,
+    name: name || '',
+    referrerId
+  });
+
+  const session = await createSession(db, user.id, req.headers['user-agent']);
+  res.json({
+    success: true,
+    token: session.token,
+    user,
+    isAdmin: db.isAdmin(user.id)
+  });
+});
+
+// Phone + Password Login (Standalone Web)
+app.post('/api/auth/phone/login', async (req, res) => {
+  const { phone, password } = req.body;
+  if (!phone || !password) {
+    return res.status(400).json({ success: false, error: 'Укажите номер телефона и пароль' });
+  }
+
+  const cleanPhone = normalizePhone(phone);
+  const user = db.verifyUserPhonePassword(cleanPhone, password);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Неверный номер телефона или пароль' });
+  }
+
+  const session = await createSession(db, user.id, req.headers['user-agent']);
+  res.json({
+    success: true,
+    token: session.token,
+    user,
+    isAdmin: db.isAdmin(user.id)
+  });
+});
+
+// Bind Phone & Password to current User Profile (Account Unification)
+app.post('/api/auth/phone/bind', async (req, res) => {
+  const userId = req.userId;
+  if (!userId) {
+    return res.status(401).json({ success: false, error: 'Требуется авторизация' });
+  }
+
+  const { phone, password } = req.body;
+  if (!phone || !password) {
+    return res.status(400).json({ success: false, error: 'Номер телефона и пароль обязательны' });
+  }
+
+  const cleanPhone = normalizePhone(phone);
+  if (!isValidPhone(cleanPhone)) {
+    return res.status(400).json({ success: false, error: 'Некорректный номер телефона (например, +79991234567)' });
+  }
+
+  if (String(password).length < 6) {
+    return res.status(400).json({ success: false, error: 'Пароль должен содержать не менее 6 символов' });
+  }
+
+  const result = await db.bindPhoneToUser(userId, cleanPhone, password);
+  if (!result.success) {
+    return res.status(400).json({ success: false, error: result.error });
+  }
+
+  res.json({
+    success: true,
+    message: 'Номер телефона и пароль успешно привязаны к аккаунту!',
+    user: result.user
+  });
+});
+
+// Future SMS OTP Endpoints (Stubs ready for SMS Gateway activation)
+app.post('/api/auth/phone/send-otp', async (req, res) => {
+  const { phone } = req.body;
+  const cleanPhone = normalizePhone(phone);
+  if (!isValidPhone(cleanPhone)) {
+    return res.status(400).json({ success: false, error: 'Некорректный номер телефона' });
+  }
+  console.log(`[SMS OTP] 📲 Verification code requested for: ${cleanPhone} (SMS OTP inactive: direct password registration is currently active)`);
+  res.json({
+    success: true,
+    message: 'Код отправлен (тестовый режим: подтверждение не требуется)',
+    isOtpRequired: false
+  });
+});
+
+app.post('/api/auth/phone/verify-otp', async (req, res) => {
+  res.json({
+    success: true,
+    verified: true
   });
 });
 
