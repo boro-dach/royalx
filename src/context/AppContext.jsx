@@ -929,10 +929,10 @@ export function AppProvider({ children }) {
         try {
           localStorage.setItem('rx_subscribed_v1', 'true');
         } catch (e) {}
-        showToast('Подписка подтверждена! 🎉');
+        showToast('Подписки подтверждены! 🎉');
         return { success: true, isSubscribed: true };
       }
-      showToast(data.error || 'Вы не подписаны на канал', 'error');
+      showToast(data.error || 'Вы ещё не подписались на все ресурсы', 'error');
       return { success: false, isSubscribed: false, error: data.error };
     } catch (e) {
       showToast('Ошибка проверки подписки', 'error');

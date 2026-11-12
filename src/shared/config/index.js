@@ -15,10 +15,16 @@ const cleanBot = (!rawBot || rawBot === 'RoyalX_Bot') ? 'RXcasbot' : rawBot;
 const rawChannel = getEnv('NEXT_PUBLIC_CHANNEL_USERNAME', 'VITE_CHANNEL_USERNAME', 'CHANNEL_USERNAME', 'RoyalX_Win').replace(/^@/, '');
 const cleanChannel = (!rawChannel || rawChannel === 'RXgambling') ? 'RoyalX_Win' : rawChannel;
 
+const rawCreatorChannel = getEnv('NEXT_PUBLIC_CREATOR_CHANNEL_USERNAME', 'VITE_CREATOR_CHANNEL_USERNAME', 'CREATOR_CHANNEL_USERNAME', 'psyhozlite').replace(/^@/, '');
+const cleanCreatorChannel = rawCreatorChannel || 'psyhozlite';
+
 export const APP_CONFIG = {
   botUsername: cleanBot,
   channelUsername: cleanChannel,
   channelUrl: getEnv('NEXT_PUBLIC_CHANNEL_URL', 'VITE_CHANNEL_URL', 'CHANNEL_URL', `https://t.me/${cleanChannel}`).replace('RXgambling', 'RoyalX_Win'),
+  creatorChannelUsername: cleanCreatorChannel,
+  creatorChannelUrl: getEnv('NEXT_PUBLIC_CREATOR_CHANNEL_URL', 'VITE_CREATOR_CHANNEL_URL', 'CREATOR_CHANNEL_URL', `https://t.me/${cleanCreatorChannel}`),
+  chatUrl: getEnv('NEXT_PUBLIC_CHAT_URL', 'VITE_CHAT_URL', 'GAME_CHAT_URL', 'https://t.me/+Ap1x2JyKGlpkMmNi'),
   supportUsername: getEnv('NEXT_PUBLIC_SUPPORT_USERNAME', 'VITE_SUPPORT_USERNAME', 'SUPPORT_USERNAME', 'MartinCartier'),
   supportUrl: getEnv('NEXT_PUBLIC_SUPPORT_URL', 'VITE_SUPPORT_URL', 'SUPPORT_URL', 'https://t.me/MartinCartier'),
   termsUrl: getEnv('NEXT_PUBLIC_TERMS_URL', 'VITE_TERMS_URL', 'TERMS_URL', 'https://telegra.ph/POLZOVATELSKOE-SOGLASHENIE-ROYAL-X-09-18'),
@@ -30,3 +36,33 @@ export const APP_CONFIG = {
   xrocketPayUrl: getEnv('NEXT_PUBLIC_XROCKET_PAY_URL', 'VITE_XROCKET_PAY_URL', 'XROCKET_PAY_URL', 'https://t.me/xrocket'),
   cryptobotPayUrl: getEnv('NEXT_PUBLIC_CRYPTOBOT_PAY_URL', 'VITE_CRYPTOBOT_PAY_URL', 'CRYPTOBOT_PAY_URL', 'https://t.me/CryptoBot')
 };
+
+export const MANDATORY_CHANNELS = [
+  {
+    id: 'channel',
+    badge: 'ОФИЦИАЛЬНЫЙ КАНАЛ',
+    name: 'Royal X Channel',
+    handle: `@${cleanChannel}`,
+    url: APP_CONFIG.channelUrl,
+    btnText: 'Подписаться ↗',
+    type: 'channel'
+  },
+  {
+    id: 'creator',
+    badge: 'КАНАЛ СОЗДАТЕЛЯ',
+    name: 'Канал создателя',
+    handle: `@${cleanCreatorChannel}`,
+    url: APP_CONFIG.creatorChannelUrl,
+    btnText: 'Подписаться ↗',
+    type: 'creator'
+  },
+  {
+    id: 'chat',
+    badge: 'ЧАТ ИГРОКОВ',
+    name: 'Royal X Chat',
+    handle: 'Общение и розыгрыши',
+    url: APP_CONFIG.chatUrl,
+    btnText: 'Вступить ↗',
+    type: 'chat'
+  }
+];

@@ -21,6 +21,21 @@ const nextConfig = {
       process.env.VITE_CHANNEL_URL ||
       process.env.CHANNEL_URL ||
       'https://t.me/RoyalX_Win',
+    NEXT_PUBLIC_CREATOR_CHANNEL_USERNAME:
+      process.env.NEXT_PUBLIC_CREATOR_CHANNEL_USERNAME ||
+      process.env.VITE_CREATOR_CHANNEL_USERNAME ||
+      process.env.CREATOR_CHANNEL_USERNAME ||
+      'psyhozlite',
+    NEXT_PUBLIC_CREATOR_CHANNEL_URL:
+      process.env.NEXT_PUBLIC_CREATOR_CHANNEL_URL ||
+      process.env.VITE_CREATOR_CHANNEL_URL ||
+      process.env.CREATOR_CHANNEL_URL ||
+      'https://t.me/psyhozlite',
+    NEXT_PUBLIC_CHAT_URL:
+      process.env.NEXT_PUBLIC_CHAT_URL ||
+      process.env.VITE_CHAT_URL ||
+      process.env.GAME_CHAT_URL ||
+      'https://t.me/+Ap1x2JyKGlpkMmNi',
     NEXT_PUBLIC_SUPPORT_USERNAME:
       process.env.NEXT_PUBLIC_SUPPORT_USERNAME ||
       process.env.VITE_SUPPORT_USERNAME ||

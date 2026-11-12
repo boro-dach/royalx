@@ -566,6 +566,12 @@ const rawBot = (process.env.BOT_USERNAME || 'RXcasbot').replace(/^@/, '');
 const BOT_USERNAME = (!rawBot || rawBot === 'RoyalX_Bot') ? 'RXcasbot' : rawBot;
 const CHANNEL_URL = process.env.CHANNEL_URL || `https://t.me/${CHANNEL_USERNAME}`;
 const CHANNEL_CHAT_ID = process.env.CHANNEL_CHAT_ID || `@${CHANNEL_USERNAME}`;
+
+const rawCreatorChannel = (process.env.CREATOR_CHANNEL_USERNAME || 'psyhozlite').replace(/^@/, '');
+const CREATOR_CHANNEL_USERNAME = rawCreatorChannel || 'psyhozlite';
+const CREATOR_CHANNEL_URL = process.env.CREATOR_CHANNEL_URL || `https://t.me/${CREATOR_CHANNEL_USERNAME}`;
+const CREATOR_CHANNEL_CHAT_ID = process.env.CREATOR_CHANNEL_CHAT_ID || `@${CREATOR_CHANNEL_USERNAME}`;
+
 const SUPPORT_URL = process.env.SUPPORT_URL || `https://t.me/${SUPPORT_USERNAME}`;
 const TERMS_URL = process.env.TERMS_URL || 'https://telegra.ph/POLZOVATELSKOE-SOGLASHENIE-ROYAL-X-09-18';
 const RULES_URL = process.env.RULES_URL || 'https://telegra.ph/PRAVILA-ISPOLZOVANIYA-SERVISA-ROYAL-X-09-18';
@@ -577,9 +583,36 @@ const LAVEPAY_KEY = process.env.LAVEPAY_KEY || process.env.LAVE_KEY || 'LAVE-464
 const LAVEPAY_WEBHOOK_SECRET = process.env.LAVEPAY_WEBHOOK_SECRET || process.env.LAVE_WEBHOOK_SECRET || '';
 const LAVEPAY_BASE_URL = 'https://laveshka.io/merchant/v1';
 
-const GAME_CHAT_ID = process.env.GAME_CHAT_ID || '-1004342464565';
+const GAME_CHAT_ID = process.env.COMMUNITY_CHAT_ID || process.env.GAME_CHAT_ID || '-1004342464565';
 const BETS_CHANNEL_ID = process.env.BETS_CHANNEL_ID || '-1003974356935';
-const GAME_CHAT_URL = process.env.GAME_CHAT_URL || `https://t.me/c/${GAME_CHAT_ID.replace(/^-100/, '')}/1`;
+const GAME_CHAT_URL = process.env.GAME_CHAT_URL || 'https://t.me/+Ap1x2JyKGlpkMmNi';
+
+const MANDATORY_SUBSCRIPTIONS = [
+  {
+    id: 'channel',
+    name: 'Официальный канал',
+    title: 'Royal X Channel',
+    username: CHANNEL_USERNAME,
+    url: CHANNEL_URL,
+    chatId: CHANNEL_CHAT_ID
+  },
+  {
+    id: 'creator',
+    name: 'Канал создателя',
+    title: 'Канал создателя (@psyhozlite)',
+    username: CREATOR_CHANNEL_USERNAME,
+    url: CREATOR_CHANNEL_URL,
+    chatId: CREATOR_CHANNEL_CHAT_ID
+  },
+  {
+    id: 'chat',
+    name: 'Чат игроков',
+    title: 'Royal X Chat',
+    username: '',
+    url: GAME_CHAT_URL,
+    chatId: GAME_CHAT_ID
+  }
+];
 
 class DatabaseManager {
   constructor() {
@@ -1609,6 +1642,16 @@ app.get('/api/config', (req, res) => {
     botUsername: BOT_USERNAME,
     channelUsername: CHANNEL_USERNAME,
     channelUrl: CHANNEL_URL,
+    creatorChannelUsername: CREATOR_CHANNEL_USERNAME,
+    creatorChannelUrl: CREATOR_CHANNEL_URL,
+    chatUrl: GAME_CHAT_URL,
+    mandatorySubscriptions: MANDATORY_SUBSCRIPTIONS.map(s => ({
+      id: s.id,
+      name: s.name,
+      title: s.title,
+      username: s.username,
+      url: s.url
+    })),
     supportUsername: SUPPORT_USERNAME,
     supportUrl: SUPPORT_URL,
     termsUrl: TERMS_URL,
@@ -1838,57 +1881,76 @@ app.post('/api/user/claim-cashback', (req, res) => {
   res.json({ success: true, claimedAmount: cbAmount, balance: user.balance, user });
 });
 
-// Helper to verify Telegram channel subscription
-async function checkUserSubscription(userId) {
-  // In development environment, bypass subscription check (enabled strictly in production)
+// Helper to verify subscription status in an individual Telegram channel/chat
+async function isUserSubscribedToTarget(bot, targetChatId, userId) {
+  if (!targetChatId || !bot) return true;
+  try {
+    const member = await bot.getChatMember(targetChatId, userId);
+    const isMember = ['creator', 'administrator', 'member', 'restricted'].includes(member?.status);
+    return Boolean(isMember);
+  } catch (err) {
+    const msg = err.message || '';
+    console.warn(`[SubCheck] Warning checking user ${userId} in ${targetChatId}:`, msg);
+    // If bot has no admin rights, or cannot access chat/member list, fallback to true so users aren't locked out
+    if (
+      msg.includes('chat not found') ||
+      msg.includes('CHAT_ADMIN_REQUIRED') ||
+      msg.includes('not enough rights') ||
+      msg.includes('member list is inaccessible') ||
+      msg.includes('bot is not a member') ||
+      msg.includes('bot was kicked') ||
+      (!msg.includes('user not found') && !msg.includes('PARTICIPANT_ID_INVALID'))
+    ) {
+      console.warn(`[SubCheck] ⚠️ Telegram bot lacks rights or access to ${targetChatId}. Permitting access as fallback.`);
+      return true;
+    }
+    return false;
+  }
+}
+
+// Detailed check for all mandatory subscriptions
+async function verifyUserSubscriptionsDetail(userId) {
   const isDev = process.env.NODE_ENV !== 'production' || process.env.DISABLE_SUB_CHECK === 'true';
   if (isDev) {
-    return true;
+    return { isSubscribed: true, missing: [] };
   }
 
   const id = String(userId || '').trim();
-  if (!id) return false;
-  if (db.isAdmin(id)) return true;
+  if (!id) return { isSubscribed: false, missing: MANDATORY_SUBSCRIPTIONS };
+  if (db.isAdmin(id)) return { isSubscribed: true, missing: [] };
 
   const user = db.getUser(id);
-  if (user && user.isSubscribed) return true;
+  if (user && user.isSubscribed) return { isSubscribed: true, missing: [] };
 
   if (!telegramBot) {
-    return true;
+    return { isSubscribed: true, missing: [] };
   }
 
-  const targetChannel = CHANNEL_CHAT_ID;
-  try {
-    const member = await telegramBot.getChatMember(targetChannel, id);
-    const isMember = ['creator', 'administrator', 'member', 'restricted'].includes(member?.status);
-    if (isMember) {
-      if (user) {
-        user.isSubscribed = true;
-        db.save();
-        db.syncUserToSupabase(user).catch(() => {});
-      }
-      return true;
+  const missing = [];
+  for (const item of MANDATORY_SUBSCRIPTIONS) {
+    if (!item.chatId) continue;
+    const ok = await isUserSubscribedToTarget(telegramBot, item.chatId, id);
+    if (!ok) {
+      missing.push(item);
     }
-    return false;
-  } catch (err) {
-    const msg = err.message || '';
-    console.warn(`[SubCheck] Warning checking user ${id} in ${targetChannel}:`, msg);
-    if (
-      msg.includes('chat not found') ||
-      msg.includes('not a member') ||
-      msg.includes('CHAT_ADMIN_REQUIRED') ||
-      msg.includes('not enough rights') ||
-      msg.includes('member list is inaccessible')
-    ) {
-      console.warn(`[SubCheck] ⚠️ Telegram bot lacks rights in ${targetChannel}. Permitting access as fallback.`);
-      if (user) {
-        user.isSubscribed = true;
-        db.save();
-      }
-      return true;
-    }
-    return false;
   }
+
+  if (missing.length === 0) {
+    if (user) {
+      user.isSubscribed = true;
+      db.save();
+      db.syncUserToSupabase(user).catch(() => {});
+    }
+    return { isSubscribed: true, missing: [] };
+  }
+
+  return { isSubscribed: false, missing };
+}
+
+// Helper to verify Telegram channel & chat subscriptions
+async function checkUserSubscription(userId) {
+  const { isSubscribed } = await verifyUserSubscriptionsDetail(userId);
+  return isSubscribed;
 }
 
 app.post('/api/subscription/check', async (req, res) => {
@@ -1899,6 +1961,10 @@ app.post('/api/subscription/check', async (req, res) => {
       isSubscribed: true,
       channelUsername: CHANNEL_USERNAME,
       channelUrl: CHANNEL_URL,
+      creatorChannelUsername: CREATOR_CHANNEL_USERNAME,
+      creatorChannelUrl: CREATOR_CHANNEL_URL,
+      chatUrl: GAME_CHAT_URL,
+      channels: MANDATORY_SUBSCRIPTIONS,
       isDev: true
     });
   }
@@ -1907,7 +1973,7 @@ app.post('/api/subscription/check', async (req, res) => {
   if (!userId) {
     return res.status(400).json({ success: false, error: 'userId is required' });
   }
-  const isSubscribed = await checkUserSubscription(userId);
+  const { isSubscribed, missing } = await verifyUserSubscriptionsDetail(userId);
   if (isSubscribed) {
     const user = db.getUser(userId);
     return res.json({
@@ -1915,15 +1981,29 @@ app.post('/api/subscription/check', async (req, res) => {
       isSubscribed: true,
       channelUsername: CHANNEL_USERNAME,
       channelUrl: CHANNEL_URL,
+      creatorChannelUsername: CREATOR_CHANNEL_USERNAME,
+      creatorChannelUrl: CREATOR_CHANNEL_URL,
+      chatUrl: GAME_CHAT_URL,
+      channels: MANDATORY_SUBSCRIPTIONS,
       user
     });
   }
+
+  const missingNames = missing && missing.length > 0 
+    ? missing.map(m => m.name).join(', ')
+    : 'все обязательные ресурсы';
+
   return res.json({
     success: false,
     isSubscribed: false,
     channelUsername: CHANNEL_USERNAME,
     channelUrl: CHANNEL_URL,
-    error: `Вы ещё не подписались на канал @${CHANNEL_USERNAME}. Пожалуйста, подпишитесь и нажмите «Проверить».`
+    creatorChannelUsername: CREATOR_CHANNEL_USERNAME,
+    creatorChannelUrl: CREATOR_CHANNEL_URL,
+    chatUrl: GAME_CHAT_URL,
+    channels: MANDATORY_SUBSCRIPTIONS,
+    missingChannels: missing,
+    error: `Вы ещё не вступили в: ${missingNames}. Пожалуйста, подпишитесь на все каналы и чат, затем нажмите «Проверить».`
   });
 });
 
@@ -1934,6 +2014,10 @@ app.get('/api/subscription/status', (req, res) => {
       isSubscribed: true,
       channelUsername: CHANNEL_USERNAME,
       channelUrl: CHANNEL_URL,
+      creatorChannelUsername: CREATOR_CHANNEL_USERNAME,
+      creatorChannelUrl: CREATOR_CHANNEL_URL,
+      chatUrl: GAME_CHAT_URL,
+      channels: MANDATORY_SUBSCRIPTIONS,
       isDev: true
     });
   }
@@ -1943,14 +2027,22 @@ app.get('/api/subscription/status', (req, res) => {
     return res.json({
       isSubscribed: false,
       channelUsername: CHANNEL_USERNAME,
-      channelUrl: CHANNEL_URL
+      channelUrl: CHANNEL_URL,
+      creatorChannelUsername: CREATOR_CHANNEL_USERNAME,
+      creatorChannelUrl: CREATOR_CHANNEL_URL,
+      chatUrl: GAME_CHAT_URL,
+      channels: MANDATORY_SUBSCRIPTIONS
     });
   }
   const user = db.getUser(userId);
   return res.json({
     isSubscribed: Boolean(user?.isSubscribed || db.isAdmin(userId)),
     channelUsername: CHANNEL_USERNAME,
-    channelUrl: CHANNEL_URL
+    channelUrl: CHANNEL_URL,
+    creatorChannelUsername: CREATOR_CHANNEL_USERNAME,
+    creatorChannelUrl: CREATOR_CHANNEL_URL,
+    chatUrl: GAME_CHAT_URL,
+    channels: MANDATORY_SUBSCRIPTIONS
   });
 });
 
@@ -4696,13 +4788,25 @@ function initTelegramBot(token) {
           inline_keyboard: [
             [
               {
-                text: '📢 Подписаться на канал',
+                text: '📢 Официальный канал',
                 url: CHANNEL_URL
               }
             ],
             [
               {
-                text: '✅ Проверить подписку',
+                text: '👑 Канал создателя',
+                url: CREATOR_CHANNEL_URL
+              }
+            ],
+            [
+              {
+                text: '💬 Чат игроков',
+                url: GAME_CHAT_URL
+              }
+            ],
+            [
+              {
+                text: '✅ Проверить подписки',
                 callback_data: `check_sub_${startPayload || 'direct'}`
               }
             ]
@@ -4712,11 +4816,14 @@ function initTelegramBot(token) {
         const subText = 
 `<b>${EMOJI.money} Добро пожаловать в Royal X!</b>
 
-⚠️ <b>Обязательная подписка:</b>
-Для доступа к играм, бонусам и выводу средств необходимо подписаться на наш официальный Telegram-канал:
-📢 <b>@${CHANNEL_USERNAME}</b>
+⚠️ <b>Обязательные подписки:</b>
+Для доступа к играм, бонусам и выводу средств необходимо подписаться на наши ресурсы:
 
-<i>После подписки нажмите кнопку «Проверить подписку» ниже.</i>`;
+📢 <b>Официальный канал:</b> @${CHANNEL_USERNAME}
+👑 <b>Канал создателя:</b> @${CREATOR_CHANNEL_USERNAME}
+💬 <b>Чат игроков:</b> Royal X Chat
+
+<i>После подписки на все каналы и чат нажмите кнопку «Проверить подписки» ниже.</i>`;
 
         return telegramBot.sendMessage(chatId, subText, {
           parse_mode: 'HTML',
@@ -4939,11 +5046,11 @@ function initTelegramBot(token) {
         if (data.startsWith('check_sub')) {
           const userId = String(query.from.id);
           const chatId = query.message?.chat?.id || query.from.id;
-          const isSub = await checkUserSubscription(userId);
+          const { isSubscribed: isSub, missing } = await verifyUserSubscriptionsDetail(userId);
 
           if (isSub) {
             await telegramBot.answerCallbackQuery(query.id, {
-              text: '✅ Подписка подтверждена! Добро пожаловать в Royal X!',
+              text: '✅ Все подписки подтверждены! Добро пожаловать в Royal X!',
               show_alert: false
             }).catch(() => {});
 
@@ -4953,8 +5060,11 @@ function initTelegramBot(token) {
             const { caption, replyMarkup } = getMainMenuContent(user, userId, query.from.first_name);
             return sendWelcomeBanner(chatId, caption, replyMarkup);
           } else {
+            const missingNames = missing && missing.length > 0
+              ? missing.map(m => m.name).join(', ')
+              : 'указанные ресурсы';
             return telegramBot.answerCallbackQuery(query.id, {
-              text: `❌ Вы ещё не подписались на канал @${CHANNEL_USERNAME}! Пожалуйста, подпишитесь и повторите проверку.`,
+              text: `❌ Вы ещё не подписались на: ${missingNames}! Пожалуйста, вступите во все ресурсы и повторите проверку.`,
               show_alert: true
             }).catch(() => {});
           }
