@@ -2061,10 +2061,6 @@ app.post('/api/user/agree-terms', (req, res) => {
 app.post('/api/user/claim-cashback', (req, res) => {
   const userId = req.userId;
   if (!userId) return res.status(401).json({ error: 'Требуется авторизация' });
-  const isFriday = new Date().getDay() === 5;
-  if (!isFriday) {
-    return res.status(400).json({ error: 'Вывод кэшбэка доступен только по пятницам!' });
-  }
   const user = db.getUser(userId);
   if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
   const cbAmount = parseFloat(user.cashback) || 0;
@@ -2078,14 +2074,14 @@ app.post('/api/user/claim-cashback', (req, res) => {
   user.history.unshift({
     id: Date.now() + Math.floor(Math.random() * 1000),
     type: 'cashback',
-    title: 'Кэшбэк (Пятница)',
+    title: 'Кэшбэк',
     time: `Сегодня, ${dateStr}`,
     amount: cbAmount,
     status: 'ЗАЧИСЛЕНО'
   });
   db.save();
   db.syncUserToSupabase(user);
-  console.log(`[Cashback] 💰 User ${userId} claimed Friday cashback of $${cbAmount.toFixed(2)}. New balance: $${user.balance.toFixed(2)}`);
+  console.log(`[Cashback] 💰 User ${userId} claimed cashback of $${cbAmount.toFixed(2)}. New balance: $${user.balance.toFixed(2)}`);
   res.json({ success: true, claimedAmount: cbAmount, balance: user.balance, user });
 });
 

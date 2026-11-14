@@ -501,14 +501,8 @@ export function AppProvider({ children }) {
     }
   };
 
-  // Claim accumulated cashback (ONLY on Fridays, minimum 1 USDT)
+  // Claim accumulated cashback (available anytime, minimum 1 USDT)
   const claimCashback = async () => {
-    const isFriday = new Date().getDay() === 5;
-    if (!isFriday) {
-      showToast('❌ Вывод кэшбэка доступен только по пятницам!', true);
-      return;
-    }
-
     if (accumulatedCashback < 1) {
       showToast('❌ Минимальная сумма для вывода кэшбэка — 1.00 USDT', true);
       return;
