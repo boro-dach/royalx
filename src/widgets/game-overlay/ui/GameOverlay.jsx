@@ -7,6 +7,10 @@ import CrashGame from '@/features/games/ui/CrashGame';
 import UpgradeGame from '@/features/games/ui/UpgradeGame';
 import BoxesGame from '@/features/games/ui/BoxesGame';
 import EmojiGames from '@/features/games/ui/EmojiGames';
+import KenoGame from '@/features/games/ui/KenoGame';
+import HiLoGame from '@/features/games/ui/HiLoGame';
+import RedBlackGame from '@/features/games/ui/RedBlackGame';
+import CoinFlipGame from '@/features/games/ui/CoinFlipGame';
 
 export default function GameOverlay() {
   const { activeGame, setActiveGame } = useApp();
@@ -28,13 +32,21 @@ export default function GameOverlay() {
       return <UpgradeGame onBack={handleClose} />;
     case 'boxes':
       return <BoxesGame onBack={handleClose} />;
+    case 'keno':
+      return <KenoGame onBack={handleClose} />;
+    case 'hilo':
+      return <HiLoGame onBack={handleClose} />;
+    case 'rb':
+      return <RedBlackGame onBack={handleClose} />;
+    case 'coin':
+      return <CoinFlipGame onBack={handleClose} />;
     case 'emoji':
     case 'bowling':
     case 'darts':
     case 'basketball':
     case 'football':
     case 'slots':
-      return <EmojiGames onBack={handleClose} initialGame={activeGame === 'emoji' ? 'dice' : activeGame} />;
+      return <EmojiGames onBack={handleClose} initialGame={activeGame === 'emoji' ? null : activeGame} />;
     default:
       return null;
   }

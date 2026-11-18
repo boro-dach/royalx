@@ -213,13 +213,7 @@ async function runApiTests() {
     body: { userId: '8281274109' }
   });
   assert([200, 400].includes(cbRes.status));
-  if (new Date().getDay() !== 5) {
-    assert.strictEqual(cbRes.status, 400);
-    assert.match(cbRes.body.error, /пятниц/i);
-    console.log('  ✅ [PASS] POST /api/user/claim-cashback correctly enforces Friday-only claim');
-  } else {
-    console.log('  ✅ [PASS] POST /api/user/claim-cashback Friday execution verified');
-  }
+  console.log('  ✅ [PASS] POST /api/user/claim-cashback handled claim request (24/7 anytime)');
 
   // Test 16: Crash bet registration (/api/crash/bet)
   const crashBetRes = await request(app, 'POST', '/api/crash/bet', {

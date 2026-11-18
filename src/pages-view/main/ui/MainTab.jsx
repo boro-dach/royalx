@@ -33,11 +33,11 @@ export default function MainTab() {
 
   // Compact quick rows
   const compactGames = [
-    { id: 'emoji', title: 'Эмодзи', icon: '🎲' },
-    { id: 'keno', title: 'Кено', icon: '🧿', isSoon: true },
-    { id: 'hilo', title: 'Hi-Lo', icon: '🌈', isSoon: true },
-    { id: 'rb', title: 'R&B', icon: '🪬', isSoon: true },
-    { id: 'coin', title: 'Орёл-Решка', icon: '🪙', isSoon: true }
+    { id: 'emoji', title: 'Эмодзи', icon: '🎲', tag: '6 в 1', color: '#00e699' },
+    { id: 'keno', title: 'Кено', icon: '🧿', tag: 'до ×1000', color: '#38bdf8' },
+    { id: 'hilo', title: 'Hi-Lo', icon: '🌈', tag: 'Карты', color: '#a78bfa' },
+    { id: 'rb', title: 'R&B', icon: '🪬', tag: 'Рулетка', color: '#f43f5e' },
+    { id: 'coin', title: 'Орёл-Решка', icon: '🪙', tag: 'Стрик ×1.96+', color: '#facc15' }
   ];
 
   // Exclusive games (using ready-made cards)
@@ -64,10 +64,10 @@ export default function MainTab() {
     ...popularGames,
     ...exclusiveGames.filter(g => !popularGames.some(p => p.id === g.id)),
     { id: 'emoji', title: 'Эмодзи Игры', image: null, icon: '🎲' },
-    { id: 'keno', title: 'Кено', image: null, icon: '🧿', isSoon: true },
-    { id: 'hilo', title: 'Hi-Lo', image: null, icon: '🌈', isSoon: true },
-    { id: 'rb', title: 'R&B', image: null, icon: '🪬', isSoon: true },
-    { id: 'coin', title: 'Орёл-Решка', image: null, icon: '🪙', isSoon: true }
+    { id: 'keno', title: 'Кено', image: null, icon: '🧿' },
+    { id: 'hilo', title: 'Hi-Lo', image: null, icon: '🌈' },
+    { id: 'rb', title: 'R&B', image: null, icon: '🪬' },
+    { id: 'coin', title: 'Орёл-Решка', image: null, icon: '🪙' }
   ];
 
   const handleLaunchGame = (gameId, isSoon = false, title = '') => {
@@ -208,17 +208,33 @@ export default function MainTab() {
               {compactGames.map((game) => (
                 <div 
                   key={game.id}
-                  className={`compact-game-pill ${game.id === 'coin' ? 'pill-full-width' : ''}`}
+                  className={`compact-game-pill ${game.id === 'coin' ? 'pill-full-width' : ''} pill-${game.id}`}
                   onClick={() => handleLaunchGame(game.id, game.isSoon, game.title)}
                   role="button"
                   tabIndex={0}
                 >
                   <div className="compact-pill-left">
-                    <span className="compact-game-icon">{game.icon}</span>
-                    <span className="compact-game-title">{game.title}</span>
+                    <div 
+                      className="compact-icon-badge"
+                      style={{
+                        background: `${game.color}18`,
+                        borderColor: `${game.color}35`,
+                        boxShadow: `0 0 10px ${game.color}18`
+                      }}
+                    >
+                      <span className="compact-game-icon">{game.icon}</span>
+                    </div>
+                    <div className="compact-pill-texts">
+                      <span className="compact-game-title">{game.title}</span>
+                      {game.tag && (
+                        <span className="compact-game-tag" style={{ color: game.color }}>
+                          {game.tag}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <span className="compact-chevron">
-                    <ChevronRightIcon size={16} color="#5e6578" />
+                  <span className="compact-chevron" style={{ color: game.color }}>
+                    <ChevronRightIcon size={14} color="currentColor" />
                   </span>
                 </div>
               ))}

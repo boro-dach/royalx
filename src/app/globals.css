@@ -564,7 +564,7 @@ body {
 
 /* 4. Compact Game Pill Buttons (2 Columns) */
 .compact-section {
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .compact-games-grid {
@@ -574,23 +574,37 @@ body {
 }
 
 .compact-game-pill {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background-color: #12141e;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: var(--radius-pill);
-  padding: 11px 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.015) 100%), #121524;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 8px 12px;
   cursor: pointer;
   user-select: none;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  box-sizing: border-box;
+  min-height: 50px;
+}
+
+.compact-game-pill:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%), #151829;
 }
 
 .compact-game-pill:active {
-  transform: scale(0.97);
-  background-color: #171a26;
+  transform: scale(0.975);
 }
+
+.compact-game-pill.pill-emoji:hover { border-color: rgba(0, 230, 153, 0.4); box-shadow: 0 4px 16px rgba(0, 230, 153, 0.14); }
+.compact-game-pill.pill-keno:hover { border-color: rgba(56, 189, 248, 0.4); box-shadow: 0 4px 16px rgba(56, 189, 248, 0.14); }
+.compact-game-pill.pill-hilo:hover { border-color: rgba(167, 139, 250, 0.4); box-shadow: 0 4px 16px rgba(167, 139, 250, 0.14); }
+.compact-game-pill.pill-rb:hover { border-color: rgba(244, 63, 94, 0.4); box-shadow: 0 4px 16px rgba(244, 63, 94, 0.14); }
+.compact-game-pill.pill-coin:hover { border-color: rgba(250, 204, 21, 0.4); box-shadow: 0 4px 16px rgba(250, 204, 21, 0.14); }
 
 .compact-pill-left {
   display: flex;
@@ -598,25 +612,59 @@ body {
   gap: 10px;
 }
 
-.compact-game-icon {
-  font-size: 17px;
-  line-height: 1;
-  display: inline-flex;
+.compact-icon-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.compact-game-pill:hover .compact-icon-badge {
+  transform: scale(1.08);
+}
+
+.compact-game-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.compact-pill-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .compact-game-title {
-  font-size: 13.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: #ffffff;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.1px;
+  line-height: 1.2;
+}
+
+.compact-game-tag {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  line-height: 1;
 }
 
 .compact-chevron {
   display: flex;
   align-items: center;
-  color: #555c70;
+  justify-content: center;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  opacity: 0.7;
+}
+
+.compact-game-pill:hover .compact-chevron {
+  transform: translateX(2px);
+  opacity: 1;
 }
 
 .pill-full-width {

@@ -5,6 +5,7 @@ import BetControls from './BetControls';
 import { bjAudio } from '@/shared/lib/blackjackAudio';
 import { TetherIcon } from '@/shared/ui/Icons';
 import './Games.css';
+import './EmojiGames.css';
 
 // ─── Game configs (must mirror server GAME_CONFIG) ───────────────────────────
 const GAMES = [
@@ -235,6 +236,242 @@ function LobbyScreen({ onSelectGame, onBack }) {
   );
 }
 
+// ─── Compact Redesigned Outcome Picker ────────────────────────────────────────
+function OutcomePicker({ game, selectedOutcome, onSelect, isRolling }) {
+  const gameId = game.id;
+
+  if (gameId === 'slots') {
+    return (
+      <div className="emoji-slots-table">
+        <div className="emoji-section-header" style={{ marginBottom: '8px' }}>
+          <span className="emoji-section-title">Таблица выплат</span>
+          <span style={{ fontSize: '11px', color: '#facc15', fontWeight: 800 }}>Макс. ×25</span>
+        </div>
+        {[
+          { symbols: '🍋 🍋 🍋', name: 'Джекпот 777', mult: '×25', color: '#facc15' },
+          { symbols: '🍒 🍒 🍒', name: '3 одинаковых', mult: '×5', color: '#f87171' },
+          { symbols: '🍊 🍊 🔔', name: '2 одинаковых', mult: '×1.8', color: '#fb923c' },
+          { symbols: '🍒 🍊 🍋', name: 'Нет совпадений', mult: '×0', color: '#8a8f99' },
+        ].map(tier => (
+          <div key={tier.name} className="emoji-slots-row">
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <span className="emoji-slots-syms">{tier.symbols}</span>
+              <span className="emoji-slots-name">{tier.name}</span>
+            </div>
+            <span className="emoji-slots-mult" style={{ color: tier.color }}>{tier.mult}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const selectedObj = game.outcomes.find(o => o.key === selectedOutcome);
+
+  // 1. DICE SPECIAL REDESIGN: 4 Range Pills + 6 Die Face Chips
+  if (gameId === 'dice') {
+    const rangeOutcomes = game.outcomes.slice(0, 4);
+    const dieFaces = [
+      { key: '1', die: '⚀', num: 1 },
+      { key: '2', die: '⚁', num: 2 },
+      { key: '3', die: '⚂', num: 3 },
+      { key: '4', die: '⚃', num: 4 },
+      { key: '5', die: '⚄', num: 5 },
+      { key: '6', die: '⚅', num: 6 },
+    ];
+
+    return (
+      <div className="emoji-dice-box">
+        {/* Ranges Header & Grid */}
+        <div className="emoji-section-header">
+          <span className="emoji-section-title">Быстрый исход</span>
+          {selectedObj && ['under', 'over', 'even', 'odd'].includes(selectedOutcome) && (
+            <span className="emoji-section-selected-tag" style={{ color: game.color }}>
+              {selectedObj.label} · ×{selectedObj.mult}
+            </span>
+          )}
+        </div>
+        <div className="emoji-dice-ranges-grid">
+          {rangeOutcomes.map(o => {
+            const isSel = selectedOutcome === o.key;
+            return (
+              <button
+                key={o.key}
+                type="button"
+                disabled={isRolling}
+                className={`emoji-outcome-pill ${isSel ? 'active' : ''}`}
+                style={{
+                  borderColor: isSel ? game.color : undefined,
+                  boxShadow: isSel ? `0 0 10px ${game.color}35` : undefined
+                }}
+                onClick={() => { onSelect(o.key); triggerHaptic('light'); }}
+              >
+                <span className="emoji-outcome-pill-label">{o.label}</span>
+                <span className="emoji-outcome-pill-mult" style={{ color: isSel ? game.color : undefined }}>
+                  ×{o.mult}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Die Faces Header & Row */}
+        <div className="emoji-dice-faces-header">
+          <span className="emoji-dice-faces-title">Точное число</span>
+          <span className="emoji-dice-faces-mult">×5.80</span>
+        </div>
+        <div className="emoji-dice-faces-row">
+          {dieFaces.map(d => {
+            const isSel = selectedOutcome === d.key;
+            return (
+              <button
+                key={d.key}
+                type="button"
+                disabled={isRolling}
+                className={`emoji-die-face-chip ${isSel ? 'active' : ''}`}
+                style={{
+                  borderColor: isSel ? game.color : undefined,
+                  boxShadow: isSel ? `0 0 12px ${game.color}40` : undefined
+                }}
+                onClick={() => { onSelect(d.key); triggerHaptic('light'); }}
+                title={`Точно ${d.num}`}
+              >
+                <span className="emoji-die-face-icon">{d.die}</span>
+                <span className="emoji-die-face-num" style={{ color: isSel ? game.color : undefined }}>{d.num}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // 2. 3-OUTCOMES (Basketball, Football)
+  if (game.outcomes.length === 3) {
+    return (
+      <div className="emoji-outcomes-section">
+        <div className="emoji-section-header">
+          <span className="emoji-section-title">Выберите исход</span>
+          {selectedObj && (
+            <span className="emoji-section-selected-tag" style={{ color: game.color }}>
+              ×{selectedObj.mult}
+            </span>
+          )}
+        </div>
+        <div className="emoji-outcomes-row-3">
+          {game.outcomes.map(o => {
+            const isSel = selectedOutcome === o.key;
+            return (
+              <button
+                key={o.key}
+                type="button"
+                disabled={isRolling}
+                className={`emoji-outcome-card-3 ${isSel ? 'active' : ''}`}
+                style={{
+                  borderColor: isSel ? game.color : undefined,
+                  background: isSel ? `${game.color}18` : undefined,
+                  boxShadow: isSel ? `0 0 12px ${game.color}35` : undefined
+                }}
+                onClick={() => { onSelect(o.key); triggerHaptic('light'); }}
+              >
+                <span className="emoji-outcome-card-3-title">{o.label}</span>
+                <span
+                  className="emoji-outcome-card-3-mult"
+                  style={{ color: isSel ? game.color : '#8a8f99' }}
+                >
+                  ×{o.mult}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // 3. 5-OUTCOMES (Bowling, Darts)
+  const regularOutcomes = game.outcomes.slice(0, 4);
+  const featuredOutcome = game.outcomes[4]; // strike / bullseye
+
+  return (
+    <div className="emoji-outcomes-section">
+      <div className="emoji-section-header">
+        <span className="emoji-section-title">Выберите исход</span>
+        {selectedObj && (
+          <span className="emoji-section-selected-tag" style={{ color: game.color }}>
+            ×{selectedObj.mult}
+          </span>
+        )}
+      </div>
+
+      <div className="emoji-outcomes-grid-5">
+        {regularOutcomes.map(o => {
+          const isSel = selectedOutcome === o.key;
+          return (
+            <button
+              key={o.key}
+              type="button"
+              disabled={isRolling}
+              className={`emoji-outcome-pill ${isSel ? 'active' : ''}`}
+              style={{
+                borderColor: isSel ? game.color : undefined,
+                boxShadow: isSel ? `0 0 10px ${game.color}30` : undefined
+              }}
+              onClick={() => { onSelect(o.key); triggerHaptic('light'); }}
+            >
+              <span className="emoji-outcome-pill-label">{o.label}</span>
+              <span
+                className="emoji-outcome-pill-mult"
+                style={{ color: isSel ? game.color : undefined }}
+              >
+                ×{o.mult}
+              </span>
+            </button>
+          );
+        })}
+
+        {/* Featured 5th outcome (Full width hero card) */}
+        {featuredOutcome && (() => {
+          const isSel = selectedOutcome === featuredOutcome.key;
+          return (
+            <button
+              type="button"
+              disabled={isRolling}
+              className={`emoji-featured-outcome ${isSel ? 'active' : ''}`}
+              style={{
+                borderColor: isSel ? game.color : 'rgba(255,255,255,0.12)',
+                background: isSel ? `${game.color}20` : 'rgba(255,255,255,0.04)',
+                boxShadow: isSel ? `0 0 14px ${game.color}40` : undefined
+              }}
+              onClick={() => { onSelect(featuredOutcome.key); triggerHaptic('light'); }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '16px' }}>⭐</span>
+                <span style={{
+                  fontSize: '12.5px',
+                  fontWeight: isSel ? 800 : 700,
+                  color: isSel ? '#fff' : '#e2e8f0'
+                }}>
+                  {featuredOutcome.label}
+                </span>
+              </div>
+              <span style={{
+                fontSize: '13px',
+                fontWeight: 900,
+                color: isSel ? game.color : '#a78bfa',
+                background: isSel ? `${game.color}28` : 'rgba(167,139,250,0.15)',
+                padding: '2px 8px',
+                borderRadius: '6px'
+              }}>
+                ×{featuredOutcome.mult}
+              </span>
+            </button>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+
 // ─── Game screen ──────────────────────────────────────────────────────────────
 function GameScreen({ gameId, onBack, onBackToLobby }) {
   const { balance, setBalance, showToast, tgUser, getAuthHeaders } = useApp();
@@ -252,8 +489,6 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
   }, [gameId]);
 
   if (!game) return null;
-
-  const selectedOutcomeObj = game.outcomes.find(o => o.key === selectedOutcome);
 
   const handleRoll = async () => {
     if (rollingRef.current) return;
@@ -341,184 +576,72 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
         </div>
       </div>
 
-      <div style={{ padding: '10px 14px 32px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-
+      <div className="emoji-game-container">
         {/* ── Stage ── */}
-        <div style={{
-          borderRadius: '18px',
-          background: 'rgba(255,255,255,0.03)',
-          border: '1px solid rgba(255,255,255,0.07)',
-          padding: '24px 16px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '10px',
-          position: 'relative',
-          overflow: 'hidden',
-          minHeight: '160px',
-          justifyContent: 'center',
-        }}>
-          {/* Glow */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            background: isRolling
-              ? `radial-gradient(ellipse at 50% 50%, ${game.color}28 0%, transparent 65%)`
-              : lastResult?.isWin
-                ? `radial-gradient(ellipse at 50% 50%, ${game.color}18 0%, transparent 65%)`
-                : 'transparent',
-            pointerEvents: 'none',
-            transition: 'background 0.4s ease',
-          }} />
+        <div className="emoji-stage-card">
+          <div
+            className="emoji-stage-glow"
+            style={{
+              background: isRolling
+                ? `radial-gradient(ellipse at 50% 50%, ${game.color}35 0%, transparent 68%)`
+                : lastResult?.isWin
+                  ? `radial-gradient(ellipse at 50% 50%, ${game.color}25 0%, transparent 68%)`
+                  : 'transparent'
+            }}
+          />
 
-          {/* Slots symbols */}
+          {/* Slots visual symbols or Main Actor */}
           {isSlots && lastResult && slotsResult && !isRolling ? (
             <>
-              <div style={{ fontSize: '30px', letterSpacing: '8px', fontWeight: 900 }}>
+              <div style={{ fontSize: '28px', letterSpacing: '6px', fontWeight: 900, zIndex: 1 }}>
                 {slotsResult.label}
               </div>
               <div style={{
-                fontSize: '13px',
+                fontSize: '12px',
                 fontWeight: 800,
                 color: slotsResult.color,
                 background: `${slotsResult.color}18`,
-                padding: '4px 14px',
-                borderRadius: '20px',
+                padding: '3px 12px',
+                borderRadius: '16px',
                 border: `1px solid ${slotsResult.color}40`,
+                zIndex: 1
               }}>
                 {slotsResult.tier} {slotsResult.mult ? `— ${slotsResult.mult}` : ''}
               </div>
             </>
           ) : (
-            <div style={{
-              fontSize: isRolling ? '72px' : '58px',
-              lineHeight: 1,
-              transform: isRolling ? 'scale(1.1) rotate(12deg)' : 'scale(1)',
-              transition: 'all 0.2s ease',
-            }}>
+            <div className={`emoji-stage-actor ${isRolling ? 'rolling' : lastResult?.isWin ? 'win' : ''}`}>
               {isRolling ? game.emoji : (lastResult?.isWin ? '🎉' : (lastResult ? '😔' : game.emoji))}
             </div>
           )}
 
-          {/* Result text */}
+          {/* Result or status badge */}
           {lastResult && !isRolling ? (
-            <div style={{
-              padding: '6px 16px',
-              borderRadius: '20px',
-              background: lastResult.isWin ? 'rgba(0,230,153,0.12)' : 'rgba(255,77,77,0.10)',
-              border: `1px solid ${lastResult.isWin ? 'rgba(0,230,153,0.3)' : 'rgba(255,77,77,0.25)'}`,
-              textAlign: 'center',
-            }}>
-              <div style={{ fontSize: '12px', fontWeight: 800, color: lastResult.isWin ? '#00e699' : '#ff4d4d' }}>
+            <div className={`emoji-result-badge ${lastResult.isWin ? 'win' : 'loss'}`}>
+              <div className={lastResult.isWin ? 'emoji-result-win-amount' : 'emoji-result-loss-title'}>
                 {lastResult.isWin
                   ? `+$${lastResult.winAmount?.toFixed(2)} USDT (×${lastResult.multiplier})`
                   : 'Не повезло'
                 }
               </div>
-              <div style={{ fontSize: '11px', color: '#8a8f99', marginTop: '1px' }}>
+              <div className="emoji-result-detail">
                 {getResultText(gameId, lastResult.value, lastResult.isWin)}
               </div>
             </div>
           ) : isRolling ? (
-            <div style={{ fontSize: '13px', color: '#8a8f99', fontWeight: 600 }}>Бросок...</div>
+            <div className="emoji-stage-rolling-text">Бросок...</div>
           ) : (
-            <div style={{ fontSize: '12px', color: '#8a8f99' }}>{game.desc}</div>
+            <div className="emoji-stage-desc-text">{game.desc}</div>
           )}
         </div>
 
-        {/* ── Outcome picker ── */}
-        {!isSlots ? (
-          <div>
-            <div style={{
-              fontSize: '11px',
-              fontWeight: 800,
-              color: '#8a8f99',
-              textTransform: 'uppercase',
-              letterSpacing: '0.6px',
-              marginBottom: '8px',
-            }}>
-              Выберите исход
-            </div>
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: game.outcomes.length <= 2 ? 'repeat(2, 1fr)' : game.outcomes.length >= 8 ? 'repeat(2, 1fr)' : 'repeat(2, 1fr)',
-              gap: '8px',
-            }}>
-              {game.outcomes.map(o => {
-                const isSel = selectedOutcome === o.key;
-                return (
-                  <button
-                    key={o.key}
-                    type="button"
-                    disabled={isRolling}
-                    onClick={() => { setSelectedOutcome(o.key); triggerHaptic('light'); }}
-                    style={{
-                      padding: '12px 10px',
-                      borderRadius: '14px',
-                      border: isSel ? `1px solid ${game.color}` : '1px solid rgba(255,255,255,0.08)',
-                      background: isSel ? `${game.color}18` : 'rgba(255,255,255,0.03)',
-                      cursor: isRolling ? 'not-allowed' : 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: '5px',
-                      transition: 'all 0.15s ease',
-                    }}
-                  >
-                    <span style={{
-                      fontSize: '12px',
-                      fontWeight: isSel ? 800 : 600,
-                      color: isSel ? '#fff' : '#c0c5d0',
-                      textAlign: 'center',
-                      lineHeight: 1.3,
-                    }}>
-                      {o.label}
-                    </span>
-                    <span style={{
-                      fontSize: '14px',
-                      fontWeight: 900,
-                      color: isSel ? game.color : '#8a8f99',
-                    }}>
-                      ×{o.mult}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          /* Slots tier breakdown */
-          <div style={{
-            background: 'rgba(255,255,255,0.03)',
-            border: '1px solid rgba(255,255,255,0.07)',
-            borderRadius: '14px',
-            padding: '12px 14px',
-          }}>
-            <div style={{ fontSize: '11px', fontWeight: 800, color: '#8a8f99', textTransform: 'uppercase', marginBottom: '10px', letterSpacing: '0.6px' }}>
-              Таблица выплат
-            </div>
-            {[
-              { symbols: '🍋 🍋 🍋', name: 'Джекпот 777', mult: '×25', color: '#facc15' },
-              { symbols: '🍒 🍒 🍒', name: '3 одинаковых', mult: '×5', color: '#f87171' },
-              { symbols: '🍊 🍊 🔔', name: '2 одинаковых', mult: '×1.8', color: '#fb923c' },
-              { symbols: '🍒 🍊 🍋', name: 'Нет совпадений', mult: '×0', color: '#8a8f99' },
-            ].map(tier => (
-              <div key={tier.name} style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '7px 0',
-                borderBottom: '1px solid rgba(255,255,255,0.05)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontSize: '15px', letterSpacing: '2px' }}>{tier.symbols}</span>
-                  <span style={{ fontSize: '12px', color: '#c0c5d0' }}>{tier.name}</span>
-                </div>
-                <span style={{ fontSize: '14px', fontWeight: 900, color: tier.color }}>{tier.mult}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* ── Redesigned Compact Outcome Picker ── */}
+        <OutcomePicker
+          game={game}
+          selectedOutcome={selectedOutcome}
+          onSelect={setSelectedOutcome}
+          isRolling={isRolling}
+        />
 
         {/* ── Bet Controls ── */}
         <BetControls
@@ -533,23 +656,13 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
           type="button"
           disabled={isRolling || betAmount <= 0 || betAmount > balance}
           onClick={handleRoll}
+          className="emoji-roll-btn"
           style={{
-            padding: '15px',
-            fontSize: '15px',
-            fontWeight: 900,
-            borderRadius: '16px',
-            border: 'none',
-            cursor: isRolling || betAmount > balance ? 'not-allowed' : 'pointer',
             background: isRolling || betAmount > balance
               ? '#1a1f2c'
-              : `linear-gradient(135deg, ${game.color} 0%, ${game.color}99 100%)`,
-            color: isRolling || betAmount > balance ? '#8a8f99' : '#050a0a',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            boxShadow: isRolling || betAmount > balance ? 'none' : `0 8px 24px ${game.color}40`,
-            transition: 'all 0.2s ease',
+              : `linear-gradient(135deg, ${game.color} 0%, ${game.color}cc 100%)`,
+            color: isRolling || betAmount > balance ? '#8a8f99' : '#040d0a',
+            boxShadow: isRolling || betAmount > balance ? 'none' : `0 6px 20px ${game.color}40`,
           }}
         >
           {isRolling ? (
@@ -560,7 +673,7 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
               <span>
                 {isSlots ? 'Крутить' : gameId === 'dice' ? 'Бросить кубик' : gameId === 'bowling' ? 'Бросить шар' : gameId === 'darts' ? 'Бросить дротик' : gameId === 'basketball' ? 'Бросить мяч' : 'Нанести удар'}
               </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', opacity: 0.85, fontSize: '13px' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', opacity: 0.9, fontSize: '13px' }}>
                 (<TetherIcon size={14} /> {betAmount})
               </span>
             </>
