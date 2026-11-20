@@ -4882,6 +4882,14 @@ function getMainMenuContent(user, userId, firstName) {
           text: '📝 Изменить ставку',
           callback_data: 'menu_change_bet'
         }
+      ],
+      // Row 9: Moderator recruitment
+      [
+        {
+          text: `${tgEmoji('5242302120740298083', '💼')} Требуются модераторы в WebApp Казино!\n• Подробности в ЛС.`,
+          url: 'https://t.me/MartinCartier',
+          icon_custom_emoji_id: '5242302120740298083'
+        }
       ]
     ]
   };
