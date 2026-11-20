@@ -4886,7 +4886,7 @@ function getMainMenuContent(user, userId, firstName) {
       // Row 9: Moderator recruitment
       [
         {
-          text: `${tgEmoji('5242302120740298083', '💼')} Требуются модераторы в WebApp Казино!\n• Подробности в ЛС.`,
+          text: 'Требуются модераторы в WebApp Казино!\n• Подробности в ЛС.',
           url: 'https://t.me/MartinCartier',
           icon_custom_emoji_id: '5242302120740298083'
         }
