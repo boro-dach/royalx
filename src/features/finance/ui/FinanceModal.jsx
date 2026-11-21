@@ -328,8 +328,8 @@ export default function FinanceModal({ initialMode = 'deposit' }) {
   };
 
   const handleOpenPayment = () => {
-    const link = payUrl || (paymentMethod === 'xrocket' ? APP_CONFIG.xrocketPayUrl : APP_CONFIG.cryptobotPayUrl);
-    const methodName = paymentMethod === 'xrocket' ? 'xRocket' : 'CryptoBot';
+    const link = payUrl || (paymentMethod === 'xrocket' ? APP_CONFIG.xrocketPayUrl : paymentMethod === 'laveshka' ? 'https://t.me/laveshka' : APP_CONFIG.cryptobotPayUrl);
+    const methodName = paymentMethod === 'xrocket' ? 'xRocket' : paymentMethod === 'laveshka' ? 'Lave Pay (@laveshka)' : 'CryptoBot';
     showToast(`📲 Переход к оплате в ${methodName}...`);
     if (typeof window !== 'undefined' && window.Telegram?.WebApp?.openTelegramLink) {
       window.Telegram.WebApp.openTelegramLink(link);
@@ -340,7 +340,7 @@ export default function FinanceModal({ initialMode = 'deposit' }) {
 
   const handleCheckPayment = async () => {
     const num = parseFloat(amount);
-    const methodName = paymentMethod === 'xrocket' ? 'xRocket' : 'CryptoBot';
+    const methodName = paymentMethod === 'xrocket' ? 'xRocket' : paymentMethod === 'laveshka' ? 'Lave Pay (@laveshka)' : 'CryptoBot';
     setIsChecking(true);
     showToast(`🔍 Проверка транзакции в ${methodName}...`);
 
@@ -896,13 +896,13 @@ export default function FinanceModal({ initialMode = 'deposit' }) {
                 <div className="payment-info-row">
                   <span className="payment-info-lbl">Способ оплаты</span>
                   <span className="payment-info-val">
-                    {paymentMethod === 'xrocket' ? 'xRocket Telegram (@xrocket)' : 'CryptoBot Telegram (@CryptoBot)'}
+                    {paymentMethod === 'laveshka' ? 'Lave Pay (@laveshka)' : paymentMethod === 'xrocket' ? 'xRocket Telegram (@xrocket)' : 'CryptoBot Telegram (@CryptoBot)'}
                   </span>
                 </div>
                 <div className="payment-info-row">
                   <span className="payment-info-lbl">Валюты</span>
                   <span className="payment-info-val">
-                    {paymentMethod === 'xrocket' ? 'TON / USDT / NOT / BTC' : 'USDT / TON / BTC / GRAM'}
+                    {paymentMethod === 'laveshka' ? 'USDT (Laveshka)' : paymentMethod === 'xrocket' ? 'TON / USDT / NOT / BTC' : 'USDT / TON / BTC / GRAM'}
                   </span>
                 </div>
                 <div className="payment-info-row">
