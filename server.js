@@ -74,7 +74,12 @@ function getWebAppUrlForTelegram() {
 let currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL || 'https://royalx-x7rb.onrender.com');
 let telegramBot = null;
 const activeChatIds = new Set();
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({
+  limit: '1mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Prototype Pollution & Object Injection Sanitizer
@@ -1703,6 +1708,7 @@ const db = new DatabaseManager();
 app.use(authMiddleware(db, {
   publicPaths: [
     '/api/telegram-webhook',
+    '/api/payments/laveshka/webhook',
     '/api/health',
     '/api/crash/state',
     '/api/crash/stream',
@@ -2850,9 +2856,9 @@ app.post('/api/payments/check-invoice', async (req, res) => {
 });
 
 // Lave Pay (@laveshka) Webhook Endpoint
-app.post('/api/payments/laveshka/webhook', express.raw({ type: '*/*' }), async (req, res) => {
+app.post('/api/payments/laveshka/webhook', async (req, res) => {
   try {
-    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {}));
+    const rawBody = req.rawBody || (Buffer.isBuffer(req.body) ? req.body : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {})));
     const ts = req.get('x-lavepay-timestamp') || '';
     const sig = req.get('x-lavepay-signature') || '';
 
@@ -2871,7 +2877,14 @@ app.post('/api/payments/laveshka/webhook', express.raw({ type: '*/*' }), async (
       }
     }
 
-    const event = JSON.parse(rawBody.toString('utf8'));
+    let event = req.body;
+    if (typeof event === 'string' || Buffer.isBuffer(event)) {
+      try {
+        event = JSON.parse(event.toString('utf8'));
+      } catch (e) {
+        event = {};
+      }
+    }
     console.log(`[LavePay Webhook] 🔔 Received event: ${event.type} (id: ${event.id})`);
 
     if (event.type === 'invoice.paid' && event.data) {
@@ -3343,6 +3356,47 @@ async function approveWithdrawal(withdrawalId, adminName = 'Администра
     if (!checkUrl) {
       return { success: false, error: errorDetail || 'Не удалось создать чек xRocket' };
     }
+  } else if (item.method === 'laveshka') {
+    try {
+      if (!LAVEPAY_KEY) {
+        throw new Error('Lave Pay API ключ не настроен на сервере');
+      }
+      const chkRes = await fetch(`${LAVEPAY_BASE_URL}/cheques`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Api-Key': LAVEPAY_KEY
+        },
+        body: JSON.stringify({
+          amount: item.amount.toFixed(2),
+          asset: 'USDT',
+          comment: `Вывод RoyalX (#${item.id})`,
+          idempotency_key: `lave_chk_${item.id}_${Date.now()}`
+        })
+      });
+      const chkData = await chkRes.json();
+      if (chkRes.ok && chkData.ok && chkData.data?.url) {
+        checkUrl = chkData.data.url;
+        chequeId = chkData.data.id;
+        console.log(`[ApproveWithdraw] 💚 Lave Pay cheque created: ${checkUrl}`);
+      } else {
+        console.warn(`[ApproveWithdraw] Lave Pay cheque error:`, chkData);
+        if (chkData?.error?.code === 'insufficient_balance' || (chkData?.error?.message && chkData.error.message.toLowerCase().includes('balance'))) {
+          errorDetail = 'На балансе мерчанта Laveshka недостаточно USDT для создания чека. Пополните баланс мерчанта в @laveshka!';
+        } else if (chkData?.error?.code === 'payouts_disabled' || (chkData?.error?.message && chkData.error.message.toLowerCase().includes('payout'))) {
+          errorDetail = 'Выплаты по API отключены в настройках мерчанта Laveshka (Сервисы -> Для бизнеса -> Lave Pay -> Настройки).';
+        } else {
+          errorDetail = chkData?.error?.message || chkData?.error?.code || 'Ошибка создания чека в Lave Pay';
+        }
+      }
+    } catch (e) {
+      console.error('[ApproveWithdraw] Lave Pay network error:', e.message);
+      errorDetail = 'Сетевая ошибка Lave Pay: ' + e.message;
+    }
+
+    if (!checkUrl) {
+      return { success: false, error: errorDetail || 'Не удалось создать чек Lave Pay' };
+    }
   }
 
   item.status = 'completed';
@@ -3528,9 +3582,11 @@ app.post('/api/payments/withdraw', async (req, res) => {
       ? 'CryptoBot' 
       : (method === 'xrocket' 
           ? 'xRocket' 
-          : (method === 'usdt_trc20' ? 'USDT (TRC-20)' : 'Gram (TON)'));
+          : (method === 'laveshka'
+              ? 'Lave Pay (@laveshka)'
+              : (method === 'usdt_trc20' ? 'USDT (TRC-20)' : 'Gram (TON)')));
 
-    const displayAddress = (method === 'cryptobot' || method === 'xrocket')
+    const displayAddress = (method === 'cryptobot' || method === 'xrocket' || method === 'laveshka')
       ? `${methodName} Чек`
       : String(address || '').trim();
 

@@ -364,7 +364,9 @@ export default function DepositModal() {
                     ? 'Получить реквизиты USDT TRC-20' 
                     : paymentMethod === 'gram_ton' 
                       ? 'Получить реквизиты Gram (TON)' 
-                      : `Оплатить через ${paymentMethod === 'xrocket' ? 'xRocket' : 'CryptoBot'}`
+                      : paymentMethod === 'laveshka'
+                        ? 'Оплатить через Lave Pay (@laveshka)'
+                        : `Оплатить через ${paymentMethod === 'xrocket' ? 'xRocket' : 'CryptoBot'}`
                 )}
               </button>
             </>

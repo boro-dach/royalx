@@ -1701,7 +1701,7 @@ export default function AdminModal() {
                               <div>
                                 <span style={{ fontWeight: 700, color: '#ffffff' }}>ID: {w.userId}</span>
                                 <span style={{ fontSize: '10px', color: '#8a8f99', marginLeft: '6px' }}>
-                                  ({w.method === 'xrocket' ? 'xRocket' : 'CryptoBot'})
+                                  ({w.methodName || (w.method === 'xrocket' ? 'xRocket' : w.method === 'laveshka' ? 'Lave Pay' : w.method === 'usdt_trc20' ? 'USDT TRC-20' : w.method === 'gram_ton' ? 'Gram TON' : 'CryptoBot')})
                                 </span>
                               </div>
                               <span style={{ color: '#ff4d4d', fontWeight: 700, fontSize: '14px' }}>

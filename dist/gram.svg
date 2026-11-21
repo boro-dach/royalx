@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="gramGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0098EA" />
+      <stop offset="100%" stop-color="#0066B3" />
+    </linearGradient>
+    <linearGradient id="gemGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#BEE4FF" stop-opacity="0.8" />
+    </linearGradient>
+    <linearGradient id="gemGrad2" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#70C5FF" stop-opacity="0.9" />
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.7" />
+    </linearGradient>
+  </defs>
+  <!-- Background Circle -->
+  <circle cx="256" cy="256" r="236" fill="url(#gramGrad)" />
+  <!-- Gram Diamond Crystal Emblem -->
+  <path d="M 256 96 L 386 210 L 256 416 L 126 210 Z" fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round" />
+  <!-- Facets -->
+  <path d="M 256 96 L 386 210 L 256 250 Z" fill="url(#gemGrad1)" />
+  <path d="M 256 96 L 126 210 L 256 250 Z" fill="url(#gemGrad2)" />
+  <path d="M 126 210 L 256 250 L 256 416 Z" fill="#64B9FF" />
+  <path d="M 386 210 L 256 250 L 256 416 Z" fill="#3D9EEA" />
+  <!-- Inner G Letter Accent -->
+  <circle cx="256" cy="256" r="16" fill="#FFFFFF" />
+</svg>

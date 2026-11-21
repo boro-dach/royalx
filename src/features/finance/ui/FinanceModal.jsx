@@ -234,18 +234,18 @@ export default function FinanceModal({ initialMode = 'deposit' }) {
           setTimeLeft(900);
           setStep('pending');
         } else {
-          const prefix = paymentMethod === 'xrocket' ? 'XRK' : 'CB';
+          const prefix = paymentMethod === 'xrocket' ? 'XRK' : (paymentMethod === 'laveshka' ? 'LAVE' : 'CB');
           const fallbackId = `${prefix}-${Date.now().toString().slice(-6)}`;
           setInvoiceId(fallbackId);
-          setPayUrl(paymentMethod === 'xrocket' ? APP_CONFIG.xrocketPayUrl : APP_CONFIG.cryptobotPayUrl);
+          setPayUrl(paymentMethod === 'xrocket' ? APP_CONFIG.xrocketPayUrl : (paymentMethod === 'laveshka' ? 'https://t.me/laveshka' : APP_CONFIG.cryptobotPayUrl));
           setTimeLeft(900);
           setStep('pending');
         }
       } catch (e) {
-        const prefix = paymentMethod === 'xrocket' ? 'XRK' : 'CB';
+        const prefix = paymentMethod === 'xrocket' ? 'XRK' : (paymentMethod === 'laveshka' ? 'LAVE' : 'CB');
         const fallbackId = `${prefix}-${Date.now().toString().slice(-6)}`;
         setInvoiceId(fallbackId);
-        setPayUrl(paymentMethod === 'xrocket' ? APP_CONFIG.xrocketPayUrl : APP_CONFIG.cryptobotPayUrl);
+        setPayUrl(paymentMethod === 'xrocket' ? APP_CONFIG.xrocketPayUrl : (paymentMethod === 'laveshka' ? 'https://t.me/laveshka' : APP_CONFIG.cryptobotPayUrl));
         setTimeLeft(900);
         setStep('pending');
       } finally {
@@ -759,12 +759,12 @@ export default function FinanceModal({ initialMode = 'deposit' }) {
               >
                 {isCreating ? 'Создание счета...' : (
                   mode === 'deposit' 
-                    ? `Получить реквизиты (${paymentMethod === 'usdt_trc20' ? 'USDT TRC-20' : paymentMethod === 'gram_ton' ? 'Gram (TON)' : paymentMethod === 'xrocket' ? 'xRocket' : 'CryptoBot'})` 
+                    ? `Получить реквизиты (${paymentMethod === 'usdt_trc20' ? 'USDT TRC-20' : paymentMethod === 'gram_ton' ? 'Gram (TON)' : paymentMethod === 'xrocket' ? 'xRocket' : paymentMethod === 'laveshka' ? 'Lave Pay' : 'CryptoBot'})` 
                     : (wagerRequired > 0 
                         ? `Отыграйте еще ${wagerRequired.toFixed(2)} USDT` 
                         : (paymentMethod === 'usdt_trc20' || paymentMethod === 'gram_ton')
                             ? `Отправить заявку на вывод (${paymentMethod === 'usdt_trc20' ? 'USDT' : 'Gram'})`
-                            : `Вывести через ${paymentMethod === 'xrocket' ? 'xRocket' : 'CryptoBot'}`)
+                            : `Вывести через ${paymentMethod === 'xrocket' ? 'xRocket' : paymentMethod === 'laveshka' ? 'Lave Pay (@laveshka)' : 'CryptoBot'}`)
                 )}
               </button>
             </div>
