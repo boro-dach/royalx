@@ -4,6 +4,7 @@ import GameHeader from './GameHeader';
 import BetControls from './BetControls';
 import { bjAudio } from '@/shared/lib/blackjackAudio';
 import { TetherIcon } from '@/shared/ui/Icons';
+import TelegramDiceSticker from './TelegramDiceSticker';
 import './Games.css';
 import './EmojiGames.css';
 
@@ -536,7 +537,7 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
         } else {
           showToast(data.error || 'Ошибка ставки', true);
         }
-      }, 1200);
+      }, 1500);
     } catch (e) {
       setTimeout(() => {
         setIsRolling(false);
@@ -590,13 +591,18 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
             }}
           />
 
-          {/* Slots visual symbols or Main Actor */}
-          {isSlots && lastResult && slotsResult && !isRolling ? (
-            <>
-              <div style={{ fontSize: '28px', letterSpacing: '6px', fontWeight: 900, zIndex: 1 }}>
-                {slotsResult.label}
-              </div>
+          {/* Stage Actor: Real animated Telegram sticker */}
+          <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <TelegramDiceSticker
+              gameId={gameId}
+              isRolling={isRolling}
+              resultValue={lastResult?.value ?? null}
+              isWin={lastResult?.isWin ?? null}
+              size={isSlots ? 160 : 140}
+            />
+            {isSlots && lastResult && slotsResult && !isRolling && (
               <div style={{
+                marginTop: '6px',
                 fontSize: '12px',
                 fontWeight: 800,
                 color: slotsResult.color,
@@ -604,16 +610,11 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
                 padding: '3px 12px',
                 borderRadius: '16px',
                 border: `1px solid ${slotsResult.color}40`,
-                zIndex: 1
               }}>
                 {slotsResult.tier} {slotsResult.mult ? `— ${slotsResult.mult}` : ''}
               </div>
-            </>
-          ) : (
-            <div className={`emoji-stage-actor ${isRolling ? 'rolling' : lastResult?.isWin ? 'win' : ''}`}>
-              {isRolling ? game.emoji : (lastResult?.isWin ? '🎉' : (lastResult ? '😔' : game.emoji))}
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Result or status badge */}
           {lastResult && !isRolling ? (
