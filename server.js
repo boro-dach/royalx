@@ -2501,7 +2501,90 @@ app.post('/api/payments/create-invoice', async (req, res) => {
 
     console.log(`[Payment] 💳 Creating invoice for user ${userId}: $${numAmount} via ${method}`);
 
-    if (method === 'xrocket') {
+    if (method === 'laveshka') {
+      const orderId = `rx_${userId}_${Date.now()}`;
+      if (LAVEPAY_KEY) {
+        try {
+          const laveRes = await fetch('https://laveshka.io/merchant/v1/invoices', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Api-Key': LAVEPAY_KEY
+            },
+            body: JSON.stringify({
+              amount: numAmount.toFixed(2),
+              currency: 'USD',
+              accept: ['USDT'],
+              description: `Пополнение RoyalX (ID: ${userId})`,
+              order_id: orderId,
+              payload: JSON.stringify({ userId }),
+              return_url: getWebAppUrlForTelegram(),
+              ttl: 3600
+            })
+          });
+          const laveData = await laveRes.json();
+          if (laveRes.ok && laveData.ok && laveData.data) {
+            const invoiceId = String(laveData.data.id);
+            const payUrl = laveData.data.pay_url || `${LAVEPAY_PAY_URL}?startapp=lpay_${orderId}`;
+
+            db.data.invoices[invoiceId] = {
+              invoiceId,
+              userId,
+              method: 'laveshka',
+              amount: numAmount,
+              status: 'active',
+              payUrl,
+              orderId,
+              createdAt: Date.now()
+            };
+            db.save();
+
+            if (telegramBot && userId) {
+              telegramBot.sendMessage(userId, `💳 Счёт на пополнение Lave Pay создан!\n\n💰 Сумма: $${numAmount.toFixed(2)} USDT\n📲 Ссылка на оплату: ${payUrl}`, { parse_mode: 'HTML' }).catch(() => {});
+            }
+
+            console.log(`[LavePay] ✅ Real invoice #${invoiceId} created successfully: ${payUrl}`);
+            return res.json({
+              success: true,
+              invoiceId,
+              payUrl,
+              amount: numAmount,
+              method: 'laveshka'
+            });
+          } else {
+            console.error('[LavePay] API error response:', laveData);
+          }
+        } catch (err) {
+          console.error('[LavePay] Invoice creation error:', err.message);
+        }
+      }
+
+      const fallbackId = `LAVE-${Date.now().toString().slice(-6)}`;
+      const fallbackUrl = `${LAVEPAY_PAY_URL}?start=rx_${fallbackId}`;
+      db.data.invoices[fallbackId] = {
+        invoiceId: fallbackId,
+        userId,
+        method: 'laveshka',
+        amount: numAmount,
+        status: 'active',
+        payUrl: fallbackUrl,
+        orderId,
+        createdAt: Date.now()
+      };
+      db.save();
+
+      if (telegramBot && userId) {
+        telegramBot.sendMessage(userId, `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${numAmount.toFixed(2)} USDT\n📲 Перейдите в @laveshka для оплаты.`, { parse_mode: 'HTML' }).catch(() => {});
+      }
+
+      return res.json({
+        success: true,
+        invoiceId: fallbackId,
+        payUrl: fallbackUrl,
+        amount: numAmount,
+        method: 'laveshka'
+      });
+    } else if (method === 'xrocket') {
       // Real xRocket Pay API request
       const xrocketRes = await fetch('https://pay.api.xrocket.exchange/api/v1/invoices', {
         method: 'POST',
@@ -2666,91 +2749,6 @@ app.post('/api/payments/create-invoice', async (req, res) => {
           method: 'cryptobot'
         });
       }
-    }
-
-    if (method === 'laveshka') {
-      const orderId = `rx_${userId}_${Date.now()}`;
-      if (LAVEPAY_KEY) {
-        try {
-          const laveRes = await fetch('https://laveshka.io/merchant/v1/invoices', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Api-Key': LAVEPAY_KEY
-            },
-            body: JSON.stringify({
-              amount: numAmount.toFixed(2),
-              currency: 'USD',
-              accept: ['USDT'],
-              description: `Пополнение RoyalX (ID: ${userId})`,
-              order_id: orderId,
-              payload: JSON.stringify({ userId }),
-              return_url: getWebAppUrlForTelegram(),
-              ttl: 3600
-            })
-          });
-          const laveData = await laveRes.json();
-          if (laveRes.ok && laveData.ok && laveData.data) {
-            const invoiceId = String(laveData.data.id);
-            const payUrl = laveData.data.pay_url || `${LAVEPAY_PAY_URL}?startapp=lpay_${orderId}`;
-
-            db.data.invoices[invoiceId] = {
-              invoiceId,
-              userId,
-              method: 'laveshka',
-              amount: numAmount,
-              status: 'active',
-              payUrl,
-              orderId,
-              createdAt: Date.now()
-            };
-            db.save();
-
-            if (telegramBot && userId) {
-              telegramBot.sendMessage(userId, `💳 Счёт на пополнение Lave Pay создан!\n\n💰 Сумма: $${numAmount.toFixed(2)} USDT\n📲 Ссылка на оплату: ${payUrl}`, { parse_mode: 'HTML' }).catch(() => {});
-            }
-
-            console.log(`[LavePay] ✅ Real invoice #${invoiceId} created successfully: ${payUrl}`);
-            return res.json({
-              success: true,
-              invoiceId,
-              payUrl,
-              amount: numAmount,
-              method: 'laveshka'
-            });
-          } else {
-            console.error('[LavePay] API error response:', laveData);
-          }
-        } catch (err) {
-          console.error('[LavePay] Invoice creation error:', err.message);
-        }
-      }
-
-      const fallbackId = `LAVE-${Date.now().toString().slice(-6)}`;
-      const fallbackUrl = `${LAVEPAY_PAY_URL}?start=rx_${fallbackId}`;
-      db.data.invoices[fallbackId] = {
-        invoiceId: fallbackId,
-        userId,
-        method: 'laveshka',
-        amount: numAmount,
-        status: 'active',
-        payUrl: fallbackUrl,
-        orderId,
-        createdAt: Date.now()
-      };
-      db.save();
-
-      if (telegramBot && userId) {
-        telegramBot.sendMessage(userId, `💳 Счёт на пополнение создан!\n\n💰 Сумма: $${numAmount.toFixed(2)} USDT\n📲 Перейдите в @laveshka для оплаты.`, { parse_mode: 'HTML' }).catch(() => {});
-      }
-
-      return res.json({
-        success: true,
-        invoiceId: fallbackId,
-        payUrl: fallbackUrl,
-        amount: numAmount,
-        method: 'laveshka'
-      });
     }
   } catch (err) {
     console.error('[Payment] Create invoice error:', err.message);
