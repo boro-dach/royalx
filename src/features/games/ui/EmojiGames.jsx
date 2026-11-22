@@ -537,7 +537,7 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
         } else {
           showToast(data.error || 'Ошибка ставки', true);
         }
-      }, 1500);
+      }, 1100);
     } catch (e) {
       setTimeout(() => {
         setIsRolling(false);
