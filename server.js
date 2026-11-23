@@ -578,6 +578,7 @@ const CREATOR_CHANNEL_URL = process.env.CREATOR_CHANNEL_URL || `https://t.me/${C
 const CREATOR_CHANNEL_CHAT_ID = process.env.CREATOR_CHANNEL_CHAT_ID || `@${CREATOR_CHANNEL_USERNAME}`;
 
 const SUPPORT_URL = process.env.SUPPORT_URL || `https://t.me/${SUPPORT_USERNAME}`;
+const SUPPORT_TICKET_CHAT_ID = process.env.SUPPORT_TICKET_CHAT_ID || null;
 const TERMS_URL = process.env.TERMS_URL || 'https://telegra.ph/POLZOVATELSKOE-SOGLASHENIE-ROYAL-X-09-18';
 const RULES_URL = process.env.RULES_URL || 'https://telegra.ph/PRAVILA-ISPOLZOVANIYA-SERVISA-ROYAL-X-09-18';
 const PRIVACY_URL = process.env.PRIVACY_URL || 'https://telegra.ph/POLITIKA-KONFIDENCIALNOSTI-ROYAL-X-09-18';
@@ -3688,6 +3689,49 @@ ${safeAddr ? `📍 <b>Адрес кошелька:</b> <code>${safeAddr}</code>\
   } catch (err) {
     console.error('[Withdraw] Error:', err.message);
     res.status(500).json({ error: 'Ошибка обработки вывода средств' });
+  }
+});
+
+// ==========================================
+// SUPPORT TICKETS
+// ==========================================
+app.post('/api/support/ticket', async (req, res) => {
+  try {
+    const { userId, userName, topic, message } = req.body;
+    if (!userId || !topic || !message) {
+      return res.status(400).json({ success: false, error: 'Не заполнены обязательные поля' });
+    }
+    if (!message.trim() || message.trim().length < 10) {
+      return res.status(400).json({ success: false, error: 'Сообщение слишком короткое (минимум 10 символов)' });
+    }
+    if (message.trim().length > 1000) {
+      return res.status(400).json({ success: false, error: 'Сообщение слишком длинное (максимум 1000 символов)' });
+    }
+
+    const ticketId = `TKT-${Date.now().toString(36).toUpperCase()}`;
+    const now = new Date().toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
+
+    const tgText =
+      `🎫 <b>Новый тикет поддержки</b>\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `🆔 Тикет: <code>${ticketId}</code>\n` +
+      `👤 Пользователь: <b>${userName || 'Неизвестно'}</b>\n` +
+      `🔢 ID: <code>${userId}</code>\n` +
+      `📂 Тема: <b>${topic}</b>\n` +
+      `🕐 Время (МСК): ${now}\n` +
+      `━━━━━━━━━━━━━━━━━━\n` +
+      `💬 <b>Сообщение:</b>\n${message.trim()}`;
+
+    if (SUPPORT_TICKET_CHAT_ID && telegramBot) {
+      await telegramBot.sendMessage(SUPPORT_TICKET_CHAT_ID, tgText, { parse_mode: 'HTML' });
+    } else {
+      console.warn(`[Support Ticket] ${ticketId} | User ${userId} | Topic: ${topic} | Msg: ${message.trim()}`);
+    }
+
+    return res.json({ success: true, ticketId });
+  } catch (err) {
+    console.error('[Support Ticket] Error:', err.message);
+    return res.status(500).json({ success: false, error: 'Внутренняя ошибка сервера' });
   }
 });
 

@@ -1,27 +1,32 @@
 import React from 'react';
 import { useApp } from '@/context/AppContext';
-import { HomeIcon, EarnIcon, GiftIcon, UserIcon } from '@/shared/ui/Icons';
+import { HomeIcon, EarnIcon, GiftIcon, UserIcon, HeadphonesIcon } from '@/shared/ui/Icons';
 
 export default function BottomNav() {
-  const { activeTab, setActiveTab } = useApp();
+  const { activeTab, setActiveTab, setActiveModal } = useApp();
 
   const tabs = [
     { id: 'main', label: 'Главная', Icon: HomeIcon },
     { id: 'earn', label: 'Заработок', Icon: EarnIcon },
     { id: 'promos', label: 'Акции', Icon: GiftIcon },
+    { id: 'support', label: 'Поддержка', Icon: HeadphonesIcon, isModal: true },
     { id: 'cabinet', label: 'Кабинет', Icon: UserIcon }
   ];
 
-  const activeIndex = Math.max(0, tabs.findIndex(t => t.id === activeTab));
+  // For pill indicator we only count real tabs (not modal triggers)
+  const realTabs = tabs.filter(t => !t.isModal);
+  const activeIndex = Math.max(0, realTabs.findIndex(t => t.id === activeTab));
 
-  const handleTabClick = (tabId) => {
-    if (activeTab === tabId) return;
+  const handleTabClick = (tab) => {
     if (typeof window !== 'undefined' && window.Telegram?.WebApp?.HapticFeedback) {
-      try {
-        window.Telegram.WebApp.HapticFeedback.selectionChanged();
-      } catch (e) {}
+      try { window.Telegram.WebApp.HapticFeedback.selectionChanged(); } catch (e) {}
     }
-    setActiveTab(tabId);
+    if (tab.isModal) {
+      setActiveModal('support');
+    } else {
+      if (activeTab === tab.id) return;
+      setActiveTab(tab.id);
+    }
   };
 
   return (
@@ -30,18 +35,18 @@ export default function BottomNav() {
       <div 
         className="nav-active-pill"
         style={{
-          width: `calc((100% - 12px) / ${tabs.length})`,
+          width: `calc((100% - 12px) / ${realTabs.length})`,
           transform: `translateX(${activeIndex * 100}%)`
         }}
       />
       {tabs.map((tab) => {
-        const isActive = activeTab === tab.id;
+        const isActive = !tab.isModal && activeTab === tab.id;
         const IconComponent = tab.Icon;
         return (
           <div 
             key={tab.id}
             className={`nav-tab ${isActive ? 'active' : ''}`}
-            onClick={() => handleTabClick(tab.id)}
+            onClick={() => handleTabClick(tab)}
           >
             <div className="nav-tab-icon">
               <IconComponent size={20} color={isActive ? '#00e699' : '#8a8f99'} />

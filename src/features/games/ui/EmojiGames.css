@@ -77,12 +77,12 @@
   padding: 6px 14px;
   border-radius: 12px;
   text-align: center;
-  animation: emojiResultAppear 0.25s ease-out;
+  animation: emojiResultAppear 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 @keyframes emojiResultAppear {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(8px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .emoji-result-badge.win {
@@ -122,6 +122,32 @@
   color: #8a8f99;
   font-weight: 700;
   letter-spacing: 0.3px;
+  animation: emojiWaitingPulse 1s ease-in-out infinite;
+}
+
+@keyframes emojiWaitingPulse {
+  0%, 100% { opacity: 0.5; }
+  50%       { opacity: 1; }
+}
+
+/* Waiting pulse on sticker container */
+.telegram-dice-container.is-waiting img {
+  animation: emojiStickerPulse 0.9s ease-in-out infinite;
+}
+
+@keyframes emojiStickerPulse {
+  0%, 100% { opacity: 0.65; transform: scale(0.98); }
+  50%       { opacity: 1;    transform: scale(1.01); }
+}
+
+/* Result animation: sticker fades in cleanly */
+.telegram-dice-container.is-result-anim img {
+  animation: emojiStickerReveal 0.18s ease-out both;
+}
+
+@keyframes emojiStickerReveal {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 .emoji-stage-desc-text {

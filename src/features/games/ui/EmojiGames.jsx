@@ -481,12 +481,17 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
   const [selectedOutcome, setSelectedOutcome] = useState(game?.outcomes[0]?.key || '');
   const [betAmount, setBetAmount] = useState(1);
   const [isRolling, setIsRolling] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
   const [lastResult, setLastResult] = useState(null);
+  const [showResult, setShowResult] = useState(false);
   const rollingRef = useRef(false);
 
   useEffect(() => {
     setSelectedOutcome(game?.outcomes[0]?.key || '');
     setLastResult(null);
+    setShowResult(false);
+    setIsAnimating(false);
+    rollingRef.current = false;
   }, [gameId]);
 
   if (!game) return null;
@@ -502,8 +507,11 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
       showToast('❌ Недостаточно средств', true);
       return;
     }
+
     rollingRef.current = true;
     setIsRolling(true);
+    setIsAnimating(true);
+    setShowResult(false);
     setLastResult(null);
     triggerHaptic('heavy');
     bjAudio.playChip();
@@ -520,36 +528,44 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
         })
       });
       const data = await res.json();
+      setIsRolling(false);
 
-      setTimeout(() => {
-        setIsRolling(false);
+      if (data.success) {
+        // Immediately trigger the outcome animation with the exact resulting value!
+        // TelegramDiceSticker will play the full throw from start to finish for this outcome.
+        setLastResult(data);
+        if (typeof data.balance === 'number') setBalance(data.balance);
+      } else {
+        setIsAnimating(false);
         rollingRef.current = false;
-        if (data.success) {
-          setLastResult(data);
-          if (typeof data.balance === 'number') setBalance(data.balance);
-          if (data.isWin) {
-            triggerHaptic('success');
-            bjAudio.playCard();
-            showToast(`🎉 Победа! +$${data.winAmount?.toFixed(2)} USDT (×${data.multiplier})`);
-          } else {
-            triggerHaptic('error');
-          }
-        } else {
-          showToast(data.error || 'Ошибка ставки', true);
-        }
-      }, 1100);
+        showToast(data.error || 'Ошибка ставки', true);
+      }
     } catch (e) {
-      setTimeout(() => {
-        setIsRolling(false);
-        rollingRef.current = false;
-        showToast('Ошибка сети', true);
-      }, 1000);
+      setIsRolling(false);
+      setIsAnimating(false);
+      rollingRef.current = false;
+      showToast('Ошибка сети', true);
+    }
+  };
+
+  const handleAnimationComplete = () => {
+    setIsAnimating(false);
+    setShowResult(true);
+    rollingRef.current = false;
+
+    if (lastResult?.isWin) {
+      triggerHaptic('success');
+      bjAudio.playCard();
+      showToast(`🎉 Победа! +$${lastResult.winAmount?.toFixed(2)} USDT (×${lastResult.multiplier})`);
+    } else if (lastResult) {
+      triggerHaptic('error');
     }
   };
 
   // ── Render ──
   const isSlots = gameId === 'slots';
   const slotsResult = lastResult && isSlots ? getSlotsResult(lastResult.value) : null;
+  const isBusy = isRolling || isAnimating;
 
   return (
     <div className="game-screen" style={{ overflowY: 'auto' }}>
@@ -583,10 +599,10 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
           <div
             className="emoji-stage-glow"
             style={{
-              background: isRolling
-                ? `radial-gradient(ellipse at 50% 50%, ${game.color}35 0%, transparent 68%)`
-                : lastResult?.isWin
-                  ? `radial-gradient(ellipse at 50% 50%, ${game.color}25 0%, transparent 68%)`
+              background: isBusy
+                ? `radial-gradient(ellipse at 50% 50%, ${game.color}25 0%, transparent 68%)`
+                : showResult && lastResult?.isWin
+                  ? `radial-gradient(ellipse at 50% 50%, ${game.color}30 0%, transparent 68%)`
                   : 'transparent'
             }}
           />
@@ -597,10 +613,11 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
               gameId={gameId}
               isRolling={isRolling}
               resultValue={lastResult?.value ?? null}
-              isWin={lastResult?.isWin ?? null}
+              isWin={showResult ? (lastResult?.isWin ?? null) : null}
               size={isSlots ? 160 : 140}
+              onAnimationComplete={handleAnimationComplete}
             />
-            {isSlots && lastResult && slotsResult && !isRolling && (
+            {isSlots && lastResult && slotsResult && showResult && (
               <div style={{
                 marginTop: '6px',
                 fontSize: '12px',
@@ -610,14 +627,15 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
                 padding: '3px 12px',
                 borderRadius: '16px',
                 border: `1px solid ${slotsResult.color}40`,
+                animation: 'emojiResultAppear 0.3s cubic-bezier(0.16, 1, 0.3, 1) both',
               }}>
                 {slotsResult.tier} {slotsResult.mult ? `— ${slotsResult.mult}` : ''}
               </div>
             )}
           </div>
 
-          {/* Result or status badge */}
-          {lastResult && !isRolling ? (
+          {/* Result or status badge — displays ONLY after the throw animation smoothly finishes */}
+          {showResult && lastResult ? (
             <div className={`emoji-result-badge ${lastResult.isWin ? 'win' : 'loss'}`}>
               <div className={lastResult.isWin ? 'emoji-result-win-amount' : 'emoji-result-loss-title'}>
                 {lastResult.isWin
@@ -629,8 +647,10 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
                 {getResultText(gameId, lastResult.value, lastResult.isWin)}
               </div>
             </div>
-          ) : isRolling ? (
-            <div className="emoji-stage-rolling-text">Бросок...</div>
+          ) : isBusy ? (
+            <div className="emoji-stage-rolling-text">
+              {isSlots ? 'Крутим барабан...' : gameId === 'football' ? 'Удар по мячу...' : gameId === 'darts' ? 'Бросок дротика...' : 'Бросок...'}
+            </div>
           ) : (
             <div className="emoji-stage-desc-text">{game.desc}</div>
           )}
@@ -641,7 +661,7 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
           game={game}
           selectedOutcome={selectedOutcome}
           onSelect={setSelectedOutcome}
-          isRolling={isRolling}
+          isRolling={isBusy}
         />
 
         {/* ── Bet Controls ── */}
@@ -649,25 +669,30 @@ function GameScreen({ gameId, onBack, onBackToLobby }) {
           betAmount={betAmount}
           setBetAmount={setBetAmount}
           balance={balance}
-          disabled={isRolling}
+          disabled={isBusy}
         />
 
         {/* ── Roll button ── */}
         <button
           type="button"
-          disabled={isRolling || betAmount <= 0 || betAmount > balance}
+          disabled={isBusy || betAmount <= 0 || betAmount > balance}
           onClick={handleRoll}
           className="emoji-roll-btn"
           style={{
-            background: isRolling || betAmount > balance
+            background: isBusy || betAmount > balance
               ? '#1a1f2c'
               : `linear-gradient(135deg, ${game.color} 0%, ${game.color}cc 100%)`,
-            color: isRolling || betAmount > balance ? '#8a8f99' : '#040d0a',
-            boxShadow: isRolling || betAmount > balance ? 'none' : `0 6px 20px ${game.color}40`,
+            color: isBusy || betAmount > balance ? '#8a8f99' : '#040d0a',
+            boxShadow: isBusy || betAmount > balance ? 'none' : `0 6px 20px ${game.color}40`,
           }}
         >
-          {isRolling ? (
-            <span>Бросок...</span>
+          {isBusy ? (
+            <span>{isSlots ? 'Крутим...' : 'Бросок...'}</span>
+          ) : showResult ? (
+            <>
+              <span style={{ fontSize: '18px' }}>{isSlots ? '🎰' : game.emoji}</span>
+              <span>Снова!</span>
+            </>
           ) : (
             <>
               <span style={{ fontSize: '18px' }}>{isSlots ? '🎰' : game.emoji}</span>

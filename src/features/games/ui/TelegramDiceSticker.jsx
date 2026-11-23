@@ -2,46 +2,55 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
+const GAME_DURATIONS = {
+  darts: 1600,
+  dice: 2800,
+  bowling: 2800,
+  football: 2800,
+  basketball: 2800,
+  slots: 2800
+};
+
 /**
  * TelegramDiceSticker
- * Renders the authentic animated Telegram sticker for emoji games (dice, darts, bowling, basketball, football, slots).
- * 
- * Rules:
- * 1. Animate throw only when a bet is placed (isRolling = true).
- * 2. When the throw animation finishes, display the static result frame and stop animation.
- * 3. Before the first roll, display a clean static idle sticker.
- * 4. For slots, properly composite all three reels + background + frame as Telegram does:
- *    - Idle: background (slots_1) + frame (slots_2_static) + 3 static reels (slots_4, 10, 16)
- *    - Rolling: background + pull handle (slots_2) + 3 spinning reels (slots_8, 14, 20)
- *    - Result: background (or slots_1 win) + frame + 3 outcome reels corresponding to value (1-64)
+ *
+ * Seamless animation flow:
+ * 1. idle             — static idle frame before roll
+ * 2. waiting          — API request in-flight: subtle pulse
+ * 3. result_anim      — immediately plays outcome-specific webp animation from frame 0
+ * 4. result_static    — freezes on static end frame after duration, triggers onAnimationComplete
  */
-
 export default function TelegramDiceSticker({
   gameId,
   isRolling = false,
   resultValue = null,
   isWin = null,
-  size = 140
+  size = 140,
+  onAnimationComplete = null
 }) {
-  // 'idle' | 'rolling' | 'result_anim' | 'result_static'
+  // 'idle' | 'waiting' | 'result_anim' | 'result_static'
   const [animPhase, setAnimPhase] = useState('idle');
+  const [animTimestamp, setAnimTimestamp] = useState(0);
   const timerRef = useRef(null);
+  const prevResultRef = useRef(null);
 
-  // When isRolling turns true, start rolling
   useEffect(() => {
-    if (isRolling) {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      setAnimPhase('rolling');
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    if (isRolling && resultValue === null) {
+      setAnimPhase('waiting');
     } else if (resultValue !== null) {
-      // Just received result: play the outcome animation once, then settle to static end frame
+      // Whenever resultValue changes or a fresh roll arrives
+      setAnimTimestamp(Date.now());
       setAnimPhase('result_anim');
-      if (timerRef.current) clearTimeout(timerRef.current);
-      
-      // Duration of the result outcome animation before freezing to static
-      const animDuration = gameId === 'slots' ? 1400 : 2000;
+
+      const duration = GAME_DURATIONS[gameId] || 2800;
       timerRef.current = setTimeout(() => {
         setAnimPhase('result_static');
-      }, animDuration);
+        if (onAnimationComplete) {
+          onAnimationComplete();
+        }
+      }, duration);
     } else {
       setAnimPhase('idle');
     }
@@ -51,7 +60,7 @@ export default function TelegramDiceSticker({
     };
   }, [isRolling, resultValue, gameId]);
 
-  // Reset to idle on game change
+  // Reset to idle on gameId switch
   useEffect(() => {
     if (!isRolling && resultValue === null) {
       setAnimPhase('idle');
@@ -60,16 +69,6 @@ export default function TelegramDiceSticker({
 
   // ─── Slot machine multi-layer composition ───
   if (gameId === 'slots') {
-    // Determine asset indices according to Telegram's official slots specification:
-    // 0: background (slots_1)
-    // 1: winning background (slots_1_static with win glow)
-    // 2: handle pull animation (slots_2) / frame
-    // 3..7: left reel options (3 is winning 7, 4..7 non-winning)
-    // 8: left reel spin
-    // 9..13: center reel options (9 is winning 7, 10..13 non-winning)
-    // 14: center reel spin
-    // 15..19: right reel options (15 is winning 7, 16..19 non-winning)
-    // 20: right reel spin
     const map = [1, 2, 3, 0];
     const val = resultValue || 1;
     const isJackpot = val === 64;
@@ -85,38 +84,39 @@ export default function TelegramDiceSticker({
       rightIdx = 16 + map[((val - 1) >> 4) & 3];
     }
 
-    const isSpinning = animPhase === 'rolling';
+    const isSpinning = animPhase === 'result_anim';
+    const isWaiting = animPhase === 'waiting';
     const isStatic = animPhase === 'result_static' || animPhase === 'idle';
 
-    const bgSrc = isJackpot && !isSpinning 
-      ? '/stickers/slots/slots_1_static.webp'
-      : '/stickers/slots/slots_1_static.webp';
+    const bgSrc = '/stickers/slots/slots_1_static.webp';
 
     const frameSrc = isSpinning
-      ? `/stickers/slots/slots_2.webp?t=${Date.now()}`
+      ? `/stickers/slots/slots_2.webp?t=${animTimestamp}`
+      : isWaiting
+      ? '/stickers/slots/slots_2.webp'
       : '/stickers/slots/slots_2_static.webp';
 
     const leftReelSrc = isSpinning
-      ? `/stickers/slots/slots_8.webp?t=${Date.now()}`
-      : isStatic
-      ? `/stickers/slots/slots_${leftIdx}_static.webp`
-      : `/stickers/slots/slots_${leftIdx}.webp?t=${Date.now()}`;
+      ? `/stickers/slots/slots_${leftIdx}.webp?t=${animTimestamp}`
+      : isWaiting
+      ? '/stickers/slots/slots_8.webp'
+      : `/stickers/slots/slots_${leftIdx}_static.webp`;
 
     const centerReelSrc = isSpinning
-      ? `/stickers/slots/slots_14.webp?t=${Date.now()}`
-      : isStatic
-      ? `/stickers/slots/slots_${centerIdx}_static.webp`
-      : `/stickers/slots/slots_${centerIdx}.webp?t=${Date.now()}`;
+      ? `/stickers/slots/slots_${centerIdx}.webp?t=${animTimestamp}`
+      : isWaiting
+      ? '/stickers/slots/slots_14.webp'
+      : `/stickers/slots/slots_${centerIdx}_static.webp`;
 
     const rightReelSrc = isSpinning
-      ? `/stickers/slots/slots_20.webp?t=${Date.now()}`
-      : isStatic
-      ? `/stickers/slots/slots_${rightIdx}_static.webp`
-      : `/stickers/slots/slots_${rightIdx}.webp?t=${Date.now()}`;
+      ? `/stickers/slots/slots_${rightIdx}.webp?t=${animTimestamp}`
+      : isWaiting
+      ? '/stickers/slots/slots_20.webp'
+      : `/stickers/slots/slots_${rightIdx}_static.webp`;
 
     return (
       <div
-        className={`telegram-dice-container slots-machine-container ${isSpinning ? 'is-rolling' : ''} ${isWin ? 'is-win' : ''}`}
+        className={`telegram-dice-container slots-machine-container ${isWaiting ? 'is-waiting' : ''} ${isWin ? 'is-win' : ''}`}
         style={{
           width: `${size}px`,
           height: `${size}px`,
@@ -128,7 +128,7 @@ export default function TelegramDiceSticker({
           justifyContent: 'center',
           filter: isWin 
             ? 'drop-shadow(0 0 16px rgba(250, 204, 21, 0.45))'
-            : isSpinning
+            : isSpinning || isWaiting
             ? 'drop-shadow(0 4px 16px rgba(255, 255, 255, 0.2))'
             : 'drop-shadow(0 4px 14px rgba(0, 0, 0, 0.45))'
         }}
@@ -142,7 +142,7 @@ export default function TelegramDiceSticker({
 
         {/* Layer 2: Left reel */}
         <img
-          key={`left_${leftReelSrc}`}
+          key={`left_${leftReelSrc}_${animTimestamp}`}
           src={leftReelSrc}
           alt="Left Reel"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 2 }}
@@ -150,7 +150,7 @@ export default function TelegramDiceSticker({
 
         {/* Layer 3: Center reel */}
         <img
-          key={`center_${centerReelSrc}`}
+          key={`center_${centerReelSrc}_${animTimestamp}`}
           src={centerReelSrc}
           alt="Center Reel"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 2 }}
@@ -158,7 +158,7 @@ export default function TelegramDiceSticker({
 
         {/* Layer 4: Right reel */}
         <img
-          key={`right_${rightReelSrc}`}
+          key={`right_${rightReelSrc}_${animTimestamp}`}
           src={rightReelSrc}
           alt="Right Reel"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 2 }}
@@ -166,7 +166,7 @@ export default function TelegramDiceSticker({
 
         {/* Layer 5: Frame & handle */}
         <img
-          key={`frame_${frameSrc}`}
+          key={`frame_${frameSrc}_${animTimestamp}`}
           src={frameSrc}
           alt="Slots Frame"
           style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', zIndex: 3 }}
@@ -179,23 +179,19 @@ export default function TelegramDiceSticker({
   const folder = gameId;
   let stickerSrc = '';
 
-  if (animPhase === 'rolling') {
-    // Active throw animation
-    stickerSrc = `/stickers/${folder}/${folder}_idle.webp?t=${Date.now()}`;
-  } else if (animPhase === 'result_anim' && resultValue) {
-    // Play the full outcome roll animation once
-    stickerSrc = `/stickers/${folder}/${folder}_${resultValue}.webp?t=${Date.now()}`;
+  if (animPhase === 'result_anim' && resultValue) {
+    stickerSrc = `/stickers/${folder}/${folder}_${resultValue}.webp?t=${animTimestamp}`;
   } else if (animPhase === 'result_static' && resultValue) {
-    // Frozen static outcome frame (no endless loop!)
     stickerSrc = `/stickers/${folder}/${folder}_${resultValue}_static.webp`;
   } else {
-    // Before first roll: clean static idle state
     stickerSrc = `/stickers/${folder}/${folder}_idle_static.webp`;
   }
 
+  const isWaiting = animPhase === 'waiting';
+
   return (
     <div
-      className={`telegram-dice-container ${animPhase === 'rolling' ? 'is-rolling' : ''} ${isWin ? 'is-win' : ''}`}
+      className={`telegram-dice-container ${isWaiting ? 'is-waiting' : ''} ${isWin ? 'is-win' : ''} ${animPhase === 'result_anim' ? 'is-result-anim' : ''}`}
       style={{
         width: `${size}px`,
         height: `${size}px`,
@@ -208,19 +204,18 @@ export default function TelegramDiceSticker({
       }}
     >
       <img
-        key={`${folder}_${animPhase}_${resultValue || 0}`}
+        key={`${folder}_${animPhase}_${resultValue || 0}_${animTimestamp}`}
         src={stickerSrc}
         alt={gameId}
         style={{
           width: '100%',
           height: '100%',
           objectFit: 'contain',
-          filter: isWin 
+          filter: isWin
             ? 'drop-shadow(0 0 16px rgba(0, 230, 153, 0.45))'
-            : animPhase === 'rolling'
-            ? 'drop-shadow(0 4px 16px rgba(255, 255, 255, 0.2))'
+            : isWaiting
+            ? 'drop-shadow(0 4px 16px rgba(255, 255, 255, 0.15))'
             : 'drop-shadow(0 4px 14px rgba(0, 0, 0, 0.45))',
-          transition: 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
         }}
       />
     </div>
