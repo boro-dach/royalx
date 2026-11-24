@@ -3,7 +3,7 @@ import { useApp } from '@/context/AppContext';
 import { HomeIcon, EarnIcon, GiftIcon, UserIcon, HeadphonesIcon } from '@/shared/ui/Icons';
 
 export default function BottomNav() {
-  const { activeTab, setActiveTab, setActiveModal } = useApp();
+  const { activeTab, setActiveTab, activeModal, setActiveModal } = useApp();
 
   const tabs = [
     { id: 'main', label: 'Главная', Icon: HomeIcon },
@@ -13,9 +13,8 @@ export default function BottomNav() {
     { id: 'cabinet', label: 'Кабинет', Icon: UserIcon }
   ];
 
-  // For pill indicator we only count real tabs (not modal triggers)
-  const realTabs = tabs.filter(t => !t.isModal);
-  const activeIndex = Math.max(0, realTabs.findIndex(t => t.id === activeTab));
+  const effectiveActiveId = activeModal === 'support' ? 'support' : activeTab;
+  const activeIndex = Math.max(0, tabs.findIndex(t => t.id === effectiveActiveId));
 
   const handleTabClick = (tab) => {
     if (typeof window !== 'undefined' && window.Telegram?.WebApp?.HapticFeedback) {
@@ -35,12 +34,12 @@ export default function BottomNav() {
       <div 
         className="nav-active-pill"
         style={{
-          width: `calc((100% - 12px) / ${realTabs.length})`,
+          width: `calc((100% - 12px) / ${tabs.length})`,
           transform: `translateX(${activeIndex * 100}%)`
         }}
       />
       {tabs.map((tab) => {
-        const isActive = !tab.isModal && activeTab === tab.id;
+        const isActive = effectiveActiveId === tab.id;
         const IconComponent = tab.Icon;
         return (
           <div 

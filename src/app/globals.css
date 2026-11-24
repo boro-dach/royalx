@@ -38,9 +38,13 @@
 }
 
 body {
-  background-color: #06070a;
+  background-color: #050609;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(0, 230, 153, 0.09) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 85% 90%, rgba(0, 180, 140, 0.05) 0%, transparent 55%);
+  background-attachment: fixed;
   color: var(--text-white);
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", -apple-system, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", sans-serif;
   overflow-x: hidden;
   display: flex;
   justify-content: center;
@@ -49,16 +53,17 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-  font-feature-settings: "cv05", "cv08", "cv11", "ss01";
+  font-feature-settings: "cv05", "cv08", "cv11", "ss01", "tnum";
+  font-variant-numeric: tabular-nums;
 }
 
 #root {
   width: 100%;
   max-width: 430px;
   min-height: 100vh;
-  background-color: var(--bg-main);
+  background: radial-gradient(circle at 50% 0%, rgba(0, 230, 153, 0.045) 0%, transparent 45%), #090b10;
   position: relative;
-  box-shadow: 0 0 60px rgba(0, 0, 0, 0.95);
+  box-shadow: 0 0 80px rgba(0, 0, 0, 0.9);
   display: flex;
   flex-direction: column;
 }
@@ -143,15 +148,16 @@ body {
   transition: width 0.15s ease;
 }
 
-/* Header Container */
+/* Header Container — Liquid Glass */
 .header-wrapper {
   position: sticky;
   top: 0;
   z-index: 100;
-  background-color: var(--bg-main);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  background: rgba(11, 13, 19, 0.72);
+  backdrop-filter: blur(22px) saturate(165%);
+  -webkit-backdrop-filter: blur(22px) saturate(165%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.25);
   padding-top: env(safe-area-inset-top, 0px);
 }
 
@@ -229,23 +235,26 @@ body {
   text-transform: lowercase;
 }
 
-/* Capsule Balance */
+/* Capsule Balance — Specular Liquid Glass */
 .balance-capsule {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  background-color: #12141c;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: var(--radius-pill);
   padding: 4px 4px 4px 14px;
   cursor: pointer;
   user-select: none;
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
-  transition: border-color 0.2s ease, transform 0.15s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 4px 14px rgba(0, 0, 0, 0.28);
+  transition: border-color 0.2s ease, transform 0.15s ease, background 0.2s ease;
 }
 
 .balance-capsule:hover {
-  border-color: rgba(0, 230, 153, 0.35);
+  border-color: rgba(0, 230, 153, 0.42);
+  background: rgba(255, 255, 255, 0.065);
 }
 
 .balance-capsule:active {
@@ -257,19 +266,21 @@ body {
   font-weight: 700;
   color: #ffffff;
   letter-spacing: -0.2px;
+  font-variant-numeric: tabular-nums;
 }
 
 .balance-wallet-pill {
   width: 38px;
   height: 28px;
-  background: linear-gradient(180deg, #323746 0%, #202430 100%);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(0, 230, 153, 0.22) 0%, rgba(0, 230, 153, 0.09) 100%);
+  border: 1px solid rgba(0, 230, 153, 0.35);
   border-radius: var(--radius-pill);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: #ffffff;
+  color: #00e699;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
   transition: transform 0.15s ease, background 0.15s ease;
   padding: 0;
 }
@@ -306,26 +317,29 @@ body {
 
 .search-capsule-input {
   width: 100%;
-  height: 46px;
-  background-color: #12141d;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  height: 44px;
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: var(--radius-pill);
   padding: 0 40px 0 44px;
   color: #ffffff;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 400;
   outline: none;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(255, 255, 255, 0.05);
+  transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .search-capsule-input::placeholder {
-  color: #666d80;
+  color: #6b7285;
 }
 
 .search-capsule-input:focus {
-  border-color: rgba(0, 230, 153, 0.45);
-  background-color: #151824;
+  border-color: rgba(0, 230, 153, 0.5);
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: 0 0 0 3px rgba(0, 230, 153, 0.1), inset 0 1px 2px rgba(0, 0, 0, 0.25);
 }
 
 .search-clear-btn {
@@ -348,24 +362,33 @@ body {
   background: rgba(255, 255, 255, 0.1);
 }
 
-/* 2. Bonus Wheel Banner */
+/* 2. Bonus Wheel Banner — Frosted Liquid Glass */
 .bonus-banner-card {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 14px 16px;
-  background: linear-gradient(135deg, rgba(255, 180, 50, 0.08) 0%, #151722 40%, #0f1118 100%);
-  border: 1px solid rgba(255, 190, 60, 0.22);
-  border-radius: 20px;
+  background:
+    radial-gradient(circle at 12% 50%, rgba(0, 230, 153, 0.12) 0%, transparent 55%),
+    rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 22px;
   cursor: pointer;
   user-select: none;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-  transition: transform 0.15s ease, border-color 0.15s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 8px 28px rgba(0, 0, 0, 0.32);
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s ease, background 0.2s ease;
+}
+
+.bonus-banner-card:hover {
+  border-color: rgba(0, 230, 153, 0.35);
 }
 
 .bonus-banner-card:active {
-  transform: scale(0.98);
+  transform: scale(0.985);
 }
 
 .bonus-banner-left {
@@ -410,22 +433,24 @@ body {
 }
 
 .bonus-banner-btn {
-  background: #1e212b;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 230, 153, 0.14);
+  border: 1px solid rgba(0, 230, 153, 0.35);
   border-radius: var(--radius-pill);
   padding: 8px 16px;
-  color: #ffffff;
+  color: #00e699;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.1px;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
   transition: background 0.15s ease, transform 0.15s ease;
 }
 
 .bonus-banner-btn:active {
   transform: scale(0.93);
-  background: #2a2e3d;
+  background: rgba(0, 230, 153, 0.24);
 }
 
 /* Home Section Titles */
@@ -578,22 +603,25 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.015) 100%), #121524;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px;
-  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  padding: 9px 12px;
   cursor: pointer;
   user-select: none;
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.3);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 4px 14px rgba(0, 0, 0, 0.25);
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
   overflow: hidden;
   box-sizing: border-box;
-  min-height: 50px;
+  min-height: 52px;
 }
 
 .compact-game-pill:hover {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.02) 100%), #151829;
+  border-color: rgba(0, 230, 153, 0.35);
+  background: rgba(255, 255, 255, 0.065);
+  transform: translateY(-1px);
 }
 
 .compact-game-pill:active {
@@ -837,13 +865,16 @@ body {
 }
 
 .bonus-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-card);
-  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.038);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 20px;
   padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.11), 0 6px 24px rgba(0, 0, 0, 0.28);
 }
 
 .bonus-card-top {
@@ -913,16 +944,18 @@ body {
   border-radius: var(--radius-pill);
 }
 
-/* Cabinet Tab Specifics */
+/* Cabinet Tab Specifics — Liquid Glass */
 .user-profile-card {
-  background: linear-gradient(135deg, #161924 0%, #0e1017 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
   padding: 16px 18px;
   display: flex;
   align-items: center;
   gap: 14px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 26px rgba(0, 0, 0, 0.32);
 }
 
 .avatar-circle {
@@ -982,14 +1015,18 @@ body {
 }
 
 .rank-card {
-  background: linear-gradient(135deg, rgba(0, 230, 153, 0.05) 0%, #151824 50%, #0e1017 100%);
-  border: 1px solid rgba(0, 230, 153, 0.25);
-  border-radius: 20px;
+  background:
+    radial-gradient(circle at 90% 10%, rgba(0, 230, 153, 0.1) 0%, transparent 55%),
+    rgba(255, 255, 255, 0.038);
+  backdrop-filter: blur(18px) saturate(155%);
+  -webkit-backdrop-filter: blur(18px) saturate(155%);
+  border: 1px solid rgba(0, 230, 153, 0.28);
+  border-radius: 22px;
   padding: 15px 18px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 8px 26px rgba(0, 0, 0, 0.3);
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
@@ -1143,7 +1180,7 @@ body {
   transform: scale(0.98);
 }
 
-/* Bottom Navigation Bar (Floating Rounded Capsule Dock) */
+/* Bottom Navigation Bar (Floating Liquid Glass Capsule Dock) */
 .bottom-nav-container {
   position: fixed;
   bottom: calc(12px + env(safe-area-inset-bottom, 0px));
@@ -1151,30 +1188,32 @@ body {
   transform: translateX(-50%);
   width: calc(100% - 24px);
   max-width: 400px;
-  background: rgba(14, 16, 22, 0.94);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(16, 19, 28, 0.68);
+  backdrop-filter: blur(28px) saturate(185%);
+  -webkit-backdrop-filter: blur(28px) saturate(185%);
+  border: 1px solid rgba(255, 255, 255, 0.13);
   border-radius: var(--radius-pill);
   padding: 4px 6px;
   display: flex;
   align-items: center;
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 16px 42px rgba(0, 0, 0, 0.72);
   z-index: 200;
   overflow: hidden;
 }
 
-/* Translucent green background pill (no glow) */
+/* Translucent green background pill with top specular refraction */
 .nav-active-pill {
   position: absolute;
   top: 4px;
   bottom: 4px;
   left: 6px;
-  width: calc((100% - 12px) / 4);
-  background: rgba(0, 230, 153, 0.14);
-  border: 1px solid rgba(0, 230, 153, 0.28);
+  width: calc((100% - 12px) / 5);
+  background: rgba(0, 230, 153, 0.16);
+  border: 1px solid rgba(0, 230, 153, 0.32);
   border-radius: var(--radius-pill);
-  box-shadow: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
   pointer-events: none;
   z-index: 1;
   transition: transform 0.28s cubic-bezier(0.25, 1, 0.5, 1);
@@ -1184,17 +1223,19 @@ body {
 .nav-tab {
   position: relative;
   z-index: 2;
-  flex: 1;
+  flex: 1 1 0%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 6px 4px;
+  padding: 6px 2px;
   border-radius: var(--radius-pill);
   color: #777e92;
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   transition: color 0.22s ease, transform 0.15s ease;
   user-select: none;
@@ -1263,10 +1304,12 @@ body {
 }
 
 .modal-container {
-  background-color: #10121a;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(16, 19, 28, 0.82);
+  backdrop-filter: blur(28px) saturate(175%);
+  -webkit-backdrop-filter: blur(28px) saturate(175%);
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   border-bottom: none;
   border-radius: 28px 28px 0 0;
   width: 100%;
@@ -1281,7 +1324,7 @@ body {
   gap: 14px;
   animation: slideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
-  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 -12px 48px rgba(0, 0, 0, 0.9);
   box-sizing: border-box;
   position: relative;
 }
@@ -2299,6 +2342,124 @@ body {
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN — TABLETS (>= 640px) & DESKTOP PC (>= 1024px)
+   ========================================================================== */
+
+@media (min-width: 640px) {
+  #root {
+    max-width: 720px;
+    border-left: 1px solid rgba(255, 255, 255, 0.05);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .top-header {
+    padding: 14px 22px;
+  }
+
+  .main-content {
+    padding: 12px 22px 28px 22px;
+    gap: 20px;
+  }
+
+  .compact-games-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .pill-full-width {
+    grid-column: span 2;
+  }
+
+  .exclusive-games-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    overflow-x: visible;
+    padding: 4px 0 8px 0;
+  }
+
+  .search-results-grid,
+  .games-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+
+  .bottom-nav-container {
+    max-width: 520px;
+    bottom: 16px;
+  }
+
+  .nav-tab {
+    font-size: 11px;
+    padding: 7px 6px;
+  }
+
+  /* Centered Dialog Modals on Tablet / PC */
+  .modal-overlay {
+    align-items: center;
+    padding: 24px;
+  }
+
+  .modal-container {
+    max-width: 520px;
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    max-height: 85vh;
+    max-height: 85dvh;
+    padding: 18px 22px 24px 22px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.85);
+  }
+
+  .modal-container::before {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  #root {
+    max-width: 1080px;
+  }
+
+  .top-header {
+    padding: 16px 28px;
+  }
+
+  .main-content {
+    padding: 16px 28px 32px 28px;
+    gap: 22px;
+  }
+
+  .compact-games-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+  }
+
+  .pill-full-width {
+    grid-column: auto;
+  }
+
+  .exclusive-games-grid,
+  .search-results-grid,
+  .games-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+
+  .bottom-nav-container {
+    max-width: 580px;
+    bottom: 18px;
+  }
+
+  .nav-tab:hover:not(.active) {
+    color: #c0c5d0;
+  }
+
+  .modal-container {
+    max-width: 580px;
+  }
 }
 
 

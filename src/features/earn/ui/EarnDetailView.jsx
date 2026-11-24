@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { APP_CONFIG } from '@/shared/config';
 import { 
   ChevronLeftIcon, 
@@ -6,8 +6,10 @@ import {
   TikTokIcon, 
   CommentBubbleIcon 
 } from '@/shared/ui/Icons';
+import EarnProofModal from './EarnProofModal';
 
-export default function EarnDetailView({ task, onBack }) {
+export default function EarnDetailView({ task, onBack, onProofSubmitted }) {
+  const [showProofModal, setShowProofModal] = useState(false);
   const botName = (APP_CONFIG.botUsername && APP_CONFIG.botUsername !== 'RoyalX_Bot') ? APP_CONFIG.botUsername : 'RXcasbot';
   const channelName = APP_CONFIG.channelUsername || 'RoyalX_Win';
 
@@ -27,10 +29,10 @@ export default function EarnDetailView({ task, onBack }) {
       ],
       note: 'Выплата от 10 комментариев на баланс RoyalX',
       steps: [
-        `Привяжите свой TikTok в боте @${botName}`,
-        `Пишите комментарии с @${channelName} под видео про Telegram и подарки`,
-        'Присылайте в бот скриншоты и ссылки на комментарии',
-        'После проверки выплата приходит на баланс RoyalX'
+        `Пишите комментарии с упоминанием @${channelName} под видео про Telegram и подарки`,
+        'Сделайте скриншоты или скопируйте ссылки на комментарии',
+        'Нажмите «Отправить отчет» ниже и прикрепите пруфы',
+        'После проверки модератором выплата приходит на баланс RoyalX'
       ]
     },
     tiktok: {
@@ -50,7 +52,7 @@ export default function EarnDetailView({ task, onBack }) {
       steps: [
         'Создайте креативное видео про игру или выигрыш в RoyalX',
         `Добавьте в описание или комментарии отметку @${channelName} и бота @${botName}`,
-        'Отправьте ссылку на опубликованное видео в бота отчетов',
+        'Нажмите «Отправить отчет» ниже и вставьте ссылку на опубликованное видео',
         'Получайте выплаты на баланс по мере роста просмотров вашего видео'
       ]
     },
@@ -69,7 +71,7 @@ export default function EarnDetailView({ task, onBack }) {
       note: 'Проверяется вручную модератором раз в неделю',
       steps: [
         `Зайдите в настройки Telegram и добавьте @${channelName} в имя профиля`,
-        'Нажмите «Отправить отчет» в боте для фиксации вашего профиля',
+        'Нажмите «Отправить отчет» ниже и прикрепите скриншот профиля',
         'Не убирайте отметку из ника в течение недели',
         'Раз в неделю после ручной проверки модератора выплата начисляется на баланс'
       ]
@@ -84,14 +86,7 @@ export default function EarnDetailView({ task, onBack }) {
         window.Telegram.WebApp.HapticFeedback.impactOccurred('medium');
       } catch (e) {}
     }
-    const reportUrl = `https://t.me/${botName}?start=earn_${task?.id || 'report'}`;
-    if (typeof window !== 'undefined' && window.Telegram?.WebApp?.openTelegramLink) {
-      try {
-        window.Telegram.WebApp.openTelegramLink(reportUrl);
-        return;
-      } catch (e) {}
-    }
-    window.open(reportUrl, '_blank');
+    setShowProofModal(true);
   };
 
   return (
@@ -142,9 +137,16 @@ export default function EarnDetailView({ task, onBack }) {
 
       {/* Submit Report Button */}
       <button className="earn-report-btn" onClick={handleSendReport}>
-        <TelegramPaperPlaneIcon size={20} color="#ffffff" />
-        <span>Отправить отчет</span>
+        <span>📸 Отправить отчет (пруф)</span>
       </button>
+
+      {showProofModal && (
+        <EarnProofModal
+          initialTask={task?.id || 'tiktok'}
+          onClose={() => setShowProofModal(false)}
+          onSuccess={onProofSubmitted}
+        />
+      )}
     </div>
   );
 }

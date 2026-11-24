@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 import { APP_CONFIG } from '@/shared/config';
 import { 
@@ -11,16 +11,48 @@ import {
   TetherIcon
 } from '@/shared/ui/Icons';
 import EarnDetailView from './EarnDetailView';
+import EarnProofModal from './EarnProofModal';
 import './EarnTab.css';
 
+const TASK_LABELS = {
+  tiktok: '🎬 TikTok & Reels',
+  nickname: '✈️ Ник в Telegram',
+  comment: '💬 Комментарии',
+  other: '📋 Другое'
+};
+
 export default function EarnTab() {
-  const { setActiveModal, referralStats, showToast, tgUser } = useApp();
+  const { setActiveModal, referralStats, showToast, tgUser, getAuthHeaders } = useApp();
   const [selectedTask, setSelectedTask] = useState(null);
   const [openFaq, setOpenFaq] = useState(null);
+  const [showProofModal, setShowProofModal] = useState(false);
+  const [myProofs, setMyProofs] = useState([]);
+  const [isLoadingProofs, setIsLoadingProofs] = useState(false);
   const faqRef = useRef(null);
 
   const channelName = APP_CONFIG.channelUsername || 'RoyalX_Win';
-  const botName = (APP_CONFIG.botUsername && APP_CONFIG.botUsername !== 'RoyalX_Bot') ? APP_CONFIG.botUsername : 'RXcasbot';
+  const currentUserId = tgUser?.id || '3982051';
+
+  const loadMyProofs = useCallback(async () => {
+    setIsLoadingProofs(true);
+    try {
+      const res = await fetch(`/api/earn/proofs?userId=${encodeURIComponent(currentUserId)}`, {
+        headers: getAuthHeaders()
+      });
+      const data = await res.json();
+      if (data.success && Array.isArray(data.proofs)) {
+        setMyProofs(data.proofs);
+      }
+    } catch (e) {
+      // silent
+    } finally {
+      setIsLoadingProofs(false);
+    }
+  }, [currentUserId, getAuthHeaders]);
+
+  useEffect(() => {
+    loadMyProofs();
+  }, [loadMyProofs]);
 
   // Referral total earned
   const earnedAmount = referralStats?.earned || 0.00;
@@ -55,7 +87,7 @@ export default function EarnTab() {
     {
       id: 'steps',
       question: 'Как проходить этапы / выполнять задания',
-      answer: 'Выберите любой доступный способ заработка, нажмите на него и ознакомьтесь с подробными условиями и сеткой выплат. Выполните указанные действия и отправьте отчет в Telegram-бота. После быстрой проверки награда начисляется сразу на ваш игровой баланс.'
+      answer: 'Выберите любой доступный способ заработка, ознакомьтесь с условиями и сеткой выплат. Выполните действия и нажмите «Отправить пруф» прямо здесь во вкладке «Заработок». После проверки награда начисляется на ваш игровой баланс.'
     },
     {
       id: 'screenshot',
@@ -103,7 +135,8 @@ export default function EarnTab() {
     return (
       <EarnDetailView 
         task={selectedTask} 
-        onBack={() => setSelectedTask(null)} 
+        onBack={() => setSelectedTask(null)}
+        onProofSubmitted={loadMyProofs}
       />
     );
   }
@@ -129,6 +162,89 @@ export default function EarnTab() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* 1.5 Proofs Submission & History Section */}
+      <div className="earn-section-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>📸 Пруфы и отчёты</span>
+        <button
+          type="button"
+          onClick={() => setShowProofModal(true)}
+          style={{
+            background: 'linear-gradient(135deg, #00e699 0%, #00b87a 100%)',
+            color: '#05140d',
+            border: 'none',
+            borderRadius: '10px',
+            padding: '7px 12px',
+            fontSize: '12px',
+            fontWeight: 800,
+            cursor: 'pointer'
+          }}
+        >
+          + Отправить пруф
+        </button>
+      </div>
+
+      <div className="earn-referral-card" style={{ gap: '10px' }}>
+        {isLoadingProofs ? (
+          <div style={{ fontSize: '12px', color: '#8a8f99', textAlign: 'center', padding: '10px 0' }}>
+            Загрузка ваших пруфов...
+          </div>
+        ) : myProofs.length === 0 ? (
+          <div style={{ fontSize: '12px', color: '#8a8f99', lineHeight: '1.45', textAlign: 'center', padding: '6px 0' }}>
+            Вы ещё не отправляли пруфы. Выполните любое задание выше и прикрепите скриншот или ссылку!
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {myProofs.slice(0, 5).map((p) => {
+              const statusColor = p.status === 'approved' ? '#00e699' : p.status === 'rejected' ? '#ff6b6b' : '#facc15';
+              const statusBg = p.status === 'approved' ? 'rgba(0,230,153,0.14)' : p.status === 'rejected' ? 'rgba(255,77,77,0.14)' : 'rgba(250,204,21,0.14)';
+              const statusLabel = p.status === 'approved' ? '✅ Одобрен' : p.status === 'rejected' ? '❌ Отклонён' : '⏳ На проверке';
+              return (
+                <div
+                  key={p.id}
+                  style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    borderRadius: '12px',
+                    padding: '10px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px'
+                  }}
+                >
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>{TASK_LABELS[p.taskType] || '📋 Задание'}</span>
+                      {p.hasImage && <span style={{ fontSize: '11px', opacity: 0.75 }}>🖼️</span>}
+                    </div>
+                    {p.caption && (
+                      <div style={{ fontSize: '11px', color: '#8a8f99', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
+                        {p.caption}
+                      </div>
+                    )}
+                    <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
+                      {new Date(p.createdAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  <span style={{
+                    fontSize: '10.5px',
+                    fontWeight: 700,
+                    padding: '4px 8px',
+                    borderRadius: '8px',
+                    background: statusBg,
+                    color: statusColor,
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0
+                  }}>
+                    {statusLabel}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 2. Section: How to get more (Referral card) */}
@@ -204,6 +320,13 @@ export default function EarnTab() {
           );
         })}
       </div>
+      {showProofModal && (
+        <EarnProofModal
+          initialTask="tiktok"
+          onClose={() => setShowProofModal(false)}
+          onSuccess={loadMyProofs}
+        />
+      )}
     </div>
   );
 }

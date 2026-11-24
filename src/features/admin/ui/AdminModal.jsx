@@ -2530,6 +2530,16 @@ export default function AdminModal() {
                               {proof.caption && (
                                 <div style={{ fontSize: '12px', color: '#c0c5d0', marginTop: '4px', fontStyle: 'italic' }}>«{proof.caption}»</div>
                               )}
+                              {proof.link && (
+                                <div style={{ fontSize: '11px', color: '#38bdf8', marginTop: '3px', wordBreak: 'break-all' }}>🔗 {proof.link}</div>
+                              )}
+                              {proof.imageData && (
+                                <img
+                                  src={proof.imageData}
+                                  alt="Пруф"
+                                  style={{ marginTop: '6px', maxWidth: '100%', maxHeight: '140px', borderRadius: '8px', objectFit: 'contain', border: '1px solid rgba(255,255,255,0.08)' }}
+                                />
+                              )}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
                               <span style={{
