@@ -410,7 +410,10 @@ function GameScreen({ gameId, onSelectGame, onBack, onBackToLobby }) {
 
   // If throwsCount drops to 1 while a multi-throw-only outcome is selected, reset to first outcome
   const handleSelectThrows = (count) => {
+    if (isBusy) return;
     setThrowsCount(count);
+    setLastResult(null);
+    setShowResult(false);
     const curOutcome: any = game?.outcomes.find(o => o.key === selectedOutcome);
     if (curOutcome?.minThrows && count < curOutcome.minThrows) {
       setSelectedOutcome(game?.outcomes[0]?.key || '');
@@ -567,31 +570,69 @@ function GameScreen({ gameId, onSelectGame, onBack, onBackToLobby }) {
             }}
           />
 
-          {/* Stage Actor: Real animated Telegram sticker */}
-          <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <TelegramDiceSticker
-              gameId={gameId}
-              isRolling={isRolling}
-              resultValue={lastResult?.value ?? null}
-              isWin={showResult ? (lastResult?.isWin ?? null) : null}
-              size={isSlots ? 160 : 140}
-              onAnimationComplete={handleAnimationComplete}
-            />
-            {isSlots && lastResult && slotsResult && showResult && (
-              <div style={{
-                marginTop: '6px',
-                fontSize: '12px',
-                fontWeight: 800,
-                color: slotsResult.color,
-                background: `${slotsResult.color}18`,
-                padding: '3px 12px',
-                borderRadius: '16px',
-                border: `1px solid ${slotsResult.color}40`,
-                animation: 'emojiResultAppear 0.3s cubic-bezier(0.16, 1, 0.3, 1) both',
-              }}>
-                {slotsResult.tier} {slotsResult.mult ? `— ${slotsResult.mult}` : ''}
-              </div>
-            )}
+          {/* Stage Actor: 1, 2 or 3 animated Telegram stickers with vertical dividers */}
+          <div style={{
+            position: 'relative',
+            zIndex: 1,
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: throwsCount === 3 ? '8px' : '12px',
+            width: '100%'
+          }}>
+            {Array.from({ length: throwsCount }).map((_, idx) => {
+              const stickerSize = throwsCount === 1
+                ? (isSlots ? 160 : 140)
+                : throwsCount === 2
+                  ? (isSlots ? 118 : 108)
+                  : (isSlots ? 90 : 82);
+              const stickerVal = Array.isArray(lastResult?.values)
+                ? (lastResult.values[idx] ?? null)
+                : (idx === 0 ? (lastResult?.value ?? null) : null);
+              const itemSlotsRes = isSlots && showResult && stickerVal ? getSlotsResult(stickerVal) : null;
+
+              return (
+                <React.Fragment key={idx}>
+                  {idx > 0 && (
+                    <div
+                      style={{
+                        width: '1px',
+                        height: `${Math.round(stickerSize * 0.65)}px`,
+                        background: 'rgba(255, 255, 255, 0.14)',
+                        flexShrink: 0
+                      }}
+                    />
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <TelegramDiceSticker
+                      gameId={gameId}
+                      isRolling={isRolling}
+                      resultValue={stickerVal}
+                      isWin={showResult ? (lastResult?.isWin ?? null) : null}
+                      size={stickerSize}
+                      onAnimationComplete={idx === 0 ? handleAnimationComplete : null}
+                    />
+                    {itemSlotsRes && (
+                      <div style={{
+                        marginTop: '6px',
+                        fontSize: throwsCount > 1 ? '10px' : '12px',
+                        fontWeight: 800,
+                        color: itemSlotsRes.color,
+                        background: `${itemSlotsRes.color}18`,
+                        padding: throwsCount > 1 ? '2px 8px' : '3px 12px',
+                        borderRadius: '16px',
+                        border: `1px solid ${itemSlotsRes.color}40`,
+                        animation: 'emojiResultAppear 0.3s cubic-bezier(0.16, 1, 0.3, 1) both',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {itemSlotsRes.tier} {itemSlotsRes.mult ? `— ${itemSlotsRes.mult}` : ''}
+                      </div>
+                    )}
+                  </div>
+                </React.Fragment>
+              );
+            })}
           </div>
 
           {/* Result or status badge — displays ONLY after the throw animation smoothly finishes */}
