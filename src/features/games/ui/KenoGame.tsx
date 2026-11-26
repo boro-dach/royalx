@@ -45,6 +45,7 @@ export default function KenoGame({ onBack }: KenoGameProps) {
   const {
     balance,
     setBalance,
+    syncBalance,
     recordGameBet,
     showToast,
     processBetForCashback,
@@ -121,7 +122,11 @@ export default function KenoGame({ onBack }: KenoGameProps) {
       return;
     }
 
-    setBalance(prev => Math.max(0, parseFloat((prev - bet).toFixed(2))));
+    setBalance(prev => {
+      const next = Math.max(0, parseFloat((prev - bet).toFixed(2)));
+      syncBalance(next);
+      return next;
+    });
     setIsPlaying(true);
     setDrawnNumbers([]);
     setLastResult(null);
@@ -208,7 +213,6 @@ export default function KenoGame({ onBack }: KenoGameProps) {
     }, ...prev.slice(0, 19)]);
 
     if (isWin) {
-      setBalance(prev => parseFloat((prev + winAmount).toFixed(2)));
       triggerHaptic('success');
       bjAudio.playWin();
       showToast(`🎉 Победа! +$${winAmount.toFixed(2)} USDT (${matchedCount}/${pickCount} совпадений ×${multiplier})`);

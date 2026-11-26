@@ -82,6 +82,7 @@ export default function HiLoGame({ onBack }: HiLoGameProps) {
   const {
     balance,
     setBalance,
+    syncBalance,
     recordGameBet,
     showToast,
     processBetForCashback,
@@ -120,7 +121,11 @@ export default function HiLoGame({ onBack }: HiLoGameProps) {
       return;
     }
 
-    setBalance(prev => Math.max(0, parseFloat((prev - bet).toFixed(2))));
+    setBalance(prev => {
+      const next = Math.max(0, parseFloat((prev - bet).toFixed(2)));
+      syncBalance(next);
+      return next;
+    });
     setInRound(true);
     setCurrentMult(1.0);
     setStreak(0);
@@ -219,7 +224,6 @@ export default function HiLoGame({ onBack }: HiLoGameProps) {
     const bet = parseFloat(String(betAmount));
     const winAmount = parseFloat((bet * currentMult).toFixed(2));
 
-    setBalance(prev => parseFloat((prev + winAmount).toFixed(2)));
     setInRound(false);
     triggerHaptic('success');
     bjAudio.playWin();

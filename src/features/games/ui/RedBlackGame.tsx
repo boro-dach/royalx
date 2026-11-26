@@ -58,6 +58,7 @@ export default function RedBlackGame({ onBack }: RedBlackGameProps) {
   const {
     balance,
     setBalance,
+    syncBalance,
     recordGameBet,
     showToast,
     processBetForCashback,
@@ -104,7 +105,11 @@ export default function RedBlackGame({ onBack }: RedBlackGameProps) {
       return;
     }
 
-    setBalance(prev => Math.max(0, parseFloat((prev - bet).toFixed(2))));
+    setBalance(prev => {
+      const next = Math.max(0, parseFloat((prev - bet).toFixed(2)));
+      syncBalance(next);
+      return next;
+    });
     setIsSpinning(true);
     setLastResult(null);
     triggerHaptic('heavy');
@@ -156,7 +161,6 @@ export default function RedBlackGame({ onBack }: RedBlackGameProps) {
     setLastResult({ isWin, winAmount, pocket, multiplier });
 
     if (isWin) {
-      setBalance(prev => parseFloat((prev + winAmount).toFixed(2)));
       triggerHaptic('success');
       bjAudio.playWin();
       showToast(`🎉 Выигрыш! +$${winAmount.toFixed(2)} USDT (×${multiplier})`);

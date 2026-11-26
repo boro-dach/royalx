@@ -39,6 +39,7 @@ export default function CoinFlipGame({ onBack }: CoinFlipGameProps) {
   const {
     balance,
     setBalance,
+    syncBalance,
     recordGameBet,
     showToast,
     processBetForCashback,
@@ -88,7 +89,11 @@ export default function CoinFlipGame({ onBack }: CoinFlipGameProps) {
         showToast('Недостаточно средств!', true);
         return;
       }
-      setBalance(prev => Math.max(0, parseFloat((prev - bet).toFixed(2))));
+      setBalance(prev => {
+        const next = Math.max(0, parseFloat((prev - bet).toFixed(2)));
+        syncBalance(next);
+        return next;
+      });
     }
 
     setIsFlipping(true);
@@ -180,7 +185,6 @@ export default function CoinFlipGame({ onBack }: CoinFlipGameProps) {
     const bet = parseFloat(String(betAmount));
     const winAmount = parseFloat((bet * currentMult).toFixed(2));
 
-    setBalance(prev => parseFloat((prev + winAmount).toFixed(2)));
     setInStreak(false);
     setCurrentStreak(0);
     setLastResult(null);

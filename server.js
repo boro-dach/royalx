@@ -77,6 +77,8 @@ let currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL || 'https://royalx
 let telegramBot = null;
 const activeChatIds = new Set();
 
+app.set('trust proxy', 1);
+
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false
