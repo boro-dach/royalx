@@ -86,9 +86,9 @@ export default function TelegramDiceSticker({
 
     let leftIdx: number, centerIdx: number, rightIdx: number;
     if (isJackpot) {
-      leftIdx = 3;
-      centerIdx = 9;
-      rightIdx = 15;
+      leftIdx = 9;
+      centerIdx = 15;
+      rightIdx = 21;
     } else {
       leftIdx = 4 + map[(val - 1) & 3];
       centerIdx = 10 + map[((val - 1) >> 2) & 3];
