@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import TelegramBot from 'node-telegram-bot-api';
 import { spawn, execSync } from 'child_process';
 import fs from 'fs';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { verifyInitData, hashPassword, verifyPassword, createSession, validateSession, destroySession, authMiddleware, adminMiddleware, normalizePhone, isValidPhone } from './auth.js';
 import { getSupabaseClient, isSupabaseConfigured, toSnakeCase, toCamelCase } from './supabaseClient.js';
 import { EMOJI, ORDER_EMOJIS, tgEmoji } from './telegramEmojis.js';
@@ -74,6 +76,21 @@ function getWebAppUrlForTelegram() {
 let currentWebAppUrl = formatWebAppUrl(process.env.WEBAPP_URL || 'https://royalx-x7rb.onrender.com');
 let telegramBot = null;
 const activeChatIds = new Set();
+
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
+
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Слишком много попыток. Попробуйте через минуту.' }
+});
+app.use(['/api/auth/login', '/api/auth/phone/login', '/api/auth/register', '/api/auth/phone/register', '/api/auth/phone/send-otp'], authLimiter);
+
 app.use(express.json({
   limit: '5mb',
   verify: (req, res, buf) => {
@@ -512,8 +529,9 @@ app.get('/api/crash/state', (req, res) => {
 });
 
 app.post('/api/crash/bet', (req, res) => {
-  const { userId, amount, autoCashout, roundId } = req.body;
-  if (!userId) return res.status(400).json({ success: false, error: 'No userId' });
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ success: false, error: 'Требуется авторизация' });
+  const { amount, autoCashout, roundId } = req.body;
   const result = crashEngine.registerBet({
     userId: String(userId),
     amount: parseFloat(amount) || 0,
@@ -555,13 +573,13 @@ function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-const XROCKET_TOKEN = process.env.XROCKET_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNDExOSIsImp0aSI6ImFwcDozMDQxMTk6NWI3NzRjMmMtNGMwYS00MWU3LThlMDMtNWM4Y2FmMDUyZGM0IiwiaWF0IjoxNzkxNDY5ODI1fQ.CI_bAteh5MAQ7u_uG5YKPzXyL2NGcaxwwwqBBt2R-pc';
-const CRYPTOBOT_TOKEN = process.env.CRYPTOBOT_TOKEN || '503763:AA7ILqIrS2xuSTVhtdYXeBTvxYh8NtCjkjV';
-const SUPERADMIN_ID = String(process.env.SUPERADMIN_ID || '8281274109').trim();
+const XROCKET_TOKEN = process.env.XROCKET_TOKEN || '';
+const CRYPTOBOT_TOKEN = process.env.CRYPTOBOT_TOKEN || '';
+const SUPERADMIN_ID = String(process.env.SUPERADMIN_ID || '').trim();
 const DEFAULT_ADMINS = (process.env.ADMIN_IDS
   ? process.env.ADMIN_IDS.split(',').map(s => s.trim()).filter(Boolean)
-  : [SUPERADMIN_ID, '8970354031', '843961428']);
-const ADMIN_PIN = String(process.env.ADMIN_PIN || '2026').trim();
+  : (SUPERADMIN_ID ? [SUPERADMIN_ID] : []));
+const ADMIN_PIN = String(process.env.ADMIN_PIN || '').trim();
 const DEFAULT_TRC20 = process.env.TRC20_WALLET || 'TYDzsYUEpvnYmQk4zGP9sWWcTEd36d53dB';
 const DEFAULT_TON = process.env.TON_WALLET || 'UQCq7UgQ1bhs9pI8dw5juHB1cYwo1wgcQ0zxqd8eCRktwGVD';
 const SUPPORT_USERNAME = process.env.SUPPORT_USERNAME || 'MartinCartier';
@@ -585,7 +603,7 @@ const PRIVACY_URL = process.env.PRIVACY_URL || 'https://telegra.ph/POLITIKA-KONF
 const XROCKET_PAY_URL = process.env.XROCKET_PAY_URL || 'https://t.me/xrocket';
 const CRYPTOBOT_PAY_URL = process.env.CRYPTOBOT_PAY_URL || 'https://t.me/CryptoBot';
 const LAVEPAY_PAY_URL = process.env.LAVEPAY_PAY_URL || 'https://t.me/laveshka';
-const LAVEPAY_KEY = process.env.LAVEPAY_KEY || process.env.LAVE_KEY || 'LAVE-464-2dnBDnxprOacIbiyZ3NcOWUvJj073wJS';
+const LAVEPAY_KEY = process.env.LAVEPAY_KEY || process.env.LAVE_KEY || '';
 const LAVEPAY_WEBHOOK_SECRET = process.env.LAVEPAY_WEBHOOK_SECRET || process.env.LAVE_WEBHOOK_SECRET || '';
 const LAVEPAY_BASE_URL = 'https://laveshka.io/merchant/v1';
 
@@ -1716,7 +1734,6 @@ app.use(authMiddleware(db, {
     '/api/health',
     '/api/crash/state',
     '/api/crash/stream',
-    '/api/crash/bet',
     '/api/settings/public',
     '/api/payments/crypto-rates',
     '/api/promocodes/list',
@@ -1731,6 +1748,7 @@ app.use(authMiddleware(db, {
     '/api/admin/check',
     '/api/subscription/check',
     '/api/subscription/status',
+    '/api/support/ticket',
     ...(process.env.NODE_ENV === 'test' ? ['/api/auth/dev-login'] : [])
   ],
   publicPrefixes: [
@@ -2020,7 +2038,8 @@ app.post('/api/auth/logout', async (req, res) => {
 // USER DATABASE API
 // ==========================================
 app.get('/api/user/profile', (req, res) => {
-  const userId = req.userId || req.query.userId || '3982051';
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ error: 'Требуется авторизация' });
   const name = req.query.name || 'Пользователь';
   const user = db.getUser(userId, name);
   res.json({
@@ -2261,7 +2280,8 @@ app.get('/api/subscription/status', (req, res) => {
 });
 
 app.post('/api/user/bind-referrer', (req, res) => {
-  const userId = req.userId || req.body.userId;
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ success: false, error: 'Требуется авторизация' });
   const { referrerId } = req.body;
   if (!userId || !referrerId || userId === referrerId) {
     return res.json({ success: false });
@@ -2281,9 +2301,9 @@ app.post('/api/user/bind-referrer', (req, res) => {
 });
 
 app.post('/api/user/record-bet', (req, res) => {
-  const userId = req.userId || req.body.userId;
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ error: 'Требуется авторизация' });
   const { game, betAmount, winAmount, isWin, multiplier } = req.body;
-  if (!userId) return res.status(400).json({ error: 'userId is required' });
   const user = db.recordBet(userId, { game, betAmount, winAmount, isWin, multiplier });
   user.lastSeen = new Date().toISOString();
   user.currentGame = req.body.game || null;
@@ -2306,15 +2326,23 @@ app.post('/api/user/record-bet', (req, res) => {
 
 // Unified WebApp Emoji Games API (Dice, Bowling, Darts, Basketball, Football, Slots)
 app.post('/api/games/emoji-roll', (req, res) => {
-  const userId = req.userId || req.body.userId;
-  const { game, outcome, betAmount } = req.body;
-  if (!userId) return res.status(400).json({ success: false, error: 'Пользователь не найден' });
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ success: false, error: 'Требуется авторизация' });
+  const { game, outcome, betAmount, throwsCount: rawThrows = 1 } = req.body;
 
   const cfg = GAME_CONFIG[game];
   if (!cfg) return res.status(400).json({ success: false, error: 'Неизвестная игра' });
 
   const outcomeInfo = cfg.outcomes[outcome];
   if (!outcomeInfo) return res.status(400).json({ success: false, error: 'Неизвестный исход' });
+
+  const throwsCount = Math.min(3, Math.max(1, parseInt(rawThrows, 10) || 1));
+  if (outcomeInfo.minThrows && throwsCount < outcomeInfo.minThrows) {
+    return res.status(400).json({
+      success: false,
+      error: `Для исхода «${outcomeInfo.label}» выберите минимум ${outcomeInfo.minThrows} броска`
+    });
+  }
 
   const bet = Math.max(0, parseFloat(betAmount) || 0);
   if (bet <= 0) return res.status(400).json({ success: false, error: 'Ставка должна быть больше 0' });
@@ -2327,43 +2355,49 @@ app.post('/api/games/emoji-roll', (req, res) => {
   user.balance = Math.max(0, parseFloat((user.balance - bet).toFixed(2)));
 
   const maxVal = cfg.maxVal || 6;
+  const rollOne = () => Math.floor(Math.random() * maxVal) + 1;
 
-  let val = Math.floor(Math.random() * maxVal) + 1;
+  const evaluateRoll = (vals) => {
+    if (game === 'slots') {
+      // For slots with multiple spins, take best hit or sum? Take highest multiplier hit
+      let bestMult = 0;
+      let anyWin = false;
+      for (const v of vals) {
+        if (v === 64) { anyWin = true; bestMult = Math.max(bestMult, 25.0); }
+        else if ([1, 22, 43].includes(v)) { anyWin = true; bestMult = Math.max(bestMult, 5.0); }
+        else if (v % 16 === 0 || v === 32 || v === 48) { anyWin = true; bestMult = Math.max(bestMult, 1.8); }
+      }
+      return { isWin: anyWin, mult: anyWin ? parseFloat((bestMult / Math.pow(vals.length, 0.35)).toFixed(2)) : 0 };
+    }
+
+    if (outcomeInfo.checkMulti) {
+      const won = outcomeInfo.checkMulti(vals);
+      const mult = throwsCount === 3 && outcomeInfo.mult3 ? outcomeInfo.mult3 : outcomeInfo.mult;
+      return { isWin: won, mult };
+    }
+
+    const won = vals.every(v => outcomeInfo.check(v));
+    // Scale multiplier fairly when requiring all 2 or 3 throws to hit
+    const scaledMult = throwsCount === 1
+      ? outcomeInfo.mult
+      : parseFloat(Math.min(50, Math.pow(outcomeInfo.mult, throwsCount) * 0.92).toFixed(2));
+    return { isWin: won, mult: scaledMult };
+  };
+
+  let values = Array.from({ length: throwsCount }, rollOne);
 
   const rtp = user.rtp || db.data.settings?.globalRtp || 'auto';
   if (rtp === 'win' || rtp === 'lose') {
-    for (let attempts = 0; attempts < 30; attempts++) {
-      const testVal = Math.floor(Math.random() * maxVal) + 1;
-      let testWin = false;
-      if (game === 'slots') {
-        testWin = testVal === 64 || [1, 22, 43].includes(testVal) || (testVal % 16 === 0);
-      } else {
-        testWin = outcomeInfo.check(testVal);
-      }
-      if (rtp === 'win' && testWin) { val = testVal; break; }
-      if (rtp === 'lose' && !testWin) { val = testVal; break; }
+    for (let attempts = 0; attempts < 40; attempts++) {
+      const testVals = Array.from({ length: throwsCount }, rollOne);
+      const evalRes = evaluateRoll(testVals);
+      if (rtp === 'win' && evalRes.isWin) { values = testVals; break; }
+      if (rtp === 'lose' && !evalRes.isWin) { values = testVals; break; }
     }
   }
 
-  let isWin = false;
-  let mult = outcomeInfo.mult;
-
-  if (game === 'slots') {
-    if (val === 64) {
-      isWin = true;
-      mult = 25.0;
-    } else if ([1, 22, 43].includes(val)) {
-      isWin = true;
-      mult = 5.0;
-    } else if (val % 16 === 0 || val === 32 || val === 48) {
-      isWin = true;
-      mult = 1.8;
-    } else {
-      isWin = false;
-    }
-  } else {
-    isWin = outcomeInfo.check(val);
-  }
+  const { isWin, mult } = evaluateRoll(values);
+  const val = values[values.length - 1];
 
   let winAmount = 0;
   if (isWin) {
@@ -2414,6 +2448,8 @@ app.post('/api/games/emoji-roll', (req, res) => {
     game,
     emoji: cfg.emoji,
     outcome,
+    throwsCount,
+    values,
     value: val,
     isWin,
     multiplier: mult,
@@ -2424,9 +2460,10 @@ app.post('/api/games/emoji-roll', (req, res) => {
 
 // Promocodes API
 app.post('/api/promocodes/redeem', (req, res) => {
-  const userId = req.userId || req.body.userId;
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ success: false, error: 'Требуется авторизация' });
   const { code } = req.body;
-  if (!userId || !code) return res.status(400).json({ success: false, error: 'Укажите пользователя и промокод' });
+  if (!code) return res.status(400).json({ success: false, error: 'Укажите промокод' });
   const result = db.redeemPromocode(userId, code);
   if (result.user) db.syncUserToSupabase(result.user);
   if (result.promo) db.syncPromocodeToSupabase(result.promo);
@@ -3750,9 +3787,9 @@ const TASK_LABELS = {
 
 app.get('/api/earn/proofs', (req, res) => {
   try {
-    const userId = String(req.query.userId || '').trim();
+    const userId = req.userId;
     if (!userId) {
-      return res.status(400).json({ success: false, error: 'Не указан userId' });
+      return res.status(401).json({ success: false, error: 'Требуется авторизация' });
     }
     const allProofs = Array.isArray(db.data.proofs) ? db.data.proofs : [];
     const userProofs = allProofs
@@ -3937,7 +3974,7 @@ app.post('/api/admin/verify-pin', (req, res) => {
     return res.status(403).json({ success: false, error: 'Доступ запрещён: требуются права администратора' });
   }
   const { pin } = req.body || {};
-  const validPins = [process.env.ADMIN_PIN, ADMIN_PIN, '2026', '8281'].filter(Boolean);
+  const validPins = [process.env.ADMIN_PIN, ADMIN_PIN].filter(Boolean);
   if (pin && validPins.includes(String(pin).trim())) {
     return res.json({ success: true, authorized: true, message: 'Доступ к панели управления подтверждён' });
   }
@@ -4030,8 +4067,7 @@ app.get('/api/admin/check', (req, res) => {
   res.json({ 
     success: true, 
     isAdmin, 
-    isSuperAdmin, 
-    admins: db.data.admins || DEFAULT_ADMINS 
+    isSuperAdmin
   });
 });
 
@@ -4960,16 +4996,21 @@ const GAME_CONFIG = {
     name: 'Кости',
     maxVal: 6,
     outcomes: {
-      under:  { label: '1–3 Меньше',  mult: 1.95, check: v => v <= 3 },
-      over:   { label: '4–6 Больше',  mult: 1.95, check: v => v >= 4 },
-      even:   { label: 'Чётное',      mult: 1.95, check: v => v % 2 === 0 },
-      odd:    { label: 'Нечётное',    mult: 1.95, check: v => v % 2 !== 0 },
-      '1':    { label: 'Точно 1 ⚀',   mult: 5.80, check: v => v === 1 },
-      '2':    { label: 'Точно 2 ⚁',   mult: 5.80, check: v => v === 2 },
-      '3':    { label: 'Точно 3 ⚂',   mult: 5.80, check: v => v === 3 },
-      '4':    { label: 'Точно 4 ⚃',   mult: 5.80, check: v => v === 4 },
-      '5':    { label: 'Точно 5 ⚄',   mult: 5.80, check: v => v === 5 },
-      '6':    { label: 'Точно 6 ⚅',   mult: 5.80, check: v => v === 6 },
+      under:  { label: 'Меньше (1–3)', mult: 1.95, check: v => v <= 3 },
+      over:   { label: 'Больше (4–6)', mult: 1.95, check: v => v >= 4 },
+      even:   { label: 'Чётное',       mult: 1.95, check: v => v % 2 === 0 },
+      odd:    { label: 'Нечётное',     mult: 1.95, check: v => v % 2 !== 0 },
+      low2:   { label: '1–2 Низ',      mult: 2.85, check: v => v <= 2 },
+      mid2:   { label: '3–4 Центр',    mult: 2.85, check: v => v >= 3 && v <= 4 },
+      high2:  { label: '5–6 Верх',     mult: 2.85, check: v => v >= 5 },
+      '1':    { label: 'Точно 1 ⚀',    mult: 5.80, check: v => v === 1 },
+      '2':    { label: 'Точно 2 ⚁',    mult: 5.80, check: v => v === 2 },
+      '3':    { label: 'Точно 3 ⚂',    mult: 5.80, check: v => v === 3 },
+      '4':    { label: 'Точно 4 ⚃',    mult: 5.80, check: v => v === 4 },
+      '5':    { label: 'Точно 5 ⚄',    mult: 5.80, check: v => v === 5 },
+      '6':    { label: 'Точно 6 ⚅',    mult: 5.80, check: v => v === 6 },
+      ladder: { label: 'Лесенка',      mult: 2.20, mult3: 5.20, minThrows: 2, checkMulti: vals => vals.every((v, i) => i === 0 || v > vals[i - 1]) },
+      double: { label: 'Совпадение',   mult: 5.50, mult3: 28.0, minThrows: 2, checkMulti: vals => vals.every(v => v === vals[0]) },
     }
   },
   bowling: {
@@ -4977,11 +5018,14 @@ const GAME_CONFIG = {
     name: 'Боулинг',
     maxVal: 6,
     outcomes: {
-      gutter:  { label: 'Гаттер (0–2)',    mult: 5.50, check: v => v <= 2 },
-      partial: { label: '3–5 кеглей',      mult: 1.80, check: v => v >= 3 && v <= 5 },
+      gutter:  { label: 'Гаттер (1–2)',    mult: 2.85, check: v => v <= 2 },
+      partial: { label: '3–5 кеглей',      mult: 1.85, check: v => v >= 3 && v <= 5 },
       pins4:   { label: '4+ кегли',        mult: 1.70, check: v => v >= 4 },
       pins5:   { label: '5–6 кеглей',      mult: 2.80, check: v => v >= 5 },
       strike:  { label: 'Страйк 🎳 (6/6)', mult: 4.00, check: v => v === 6 },
+      even:    { label: 'Чёт (2,4,6)',     mult: 1.95, check: v => v % 2 === 0 },
+      odd:     { label: 'Нечёт (1,3,5)',   mult: 1.95, check: v => v % 2 !== 0 },
+      ladder:  { label: 'Лесенка',         mult: 2.20, mult3: 5.20, minThrows: 2, checkMulti: vals => vals.every((v, i) => i === 0 || v > vals[i - 1]) },
     }
   },
   darts: {
@@ -4989,11 +5033,14 @@ const GAME_CONFIG = {
     name: 'Дартс',
     maxVal: 6,
     outcomes: {
-      miss:     { label: 'Мимо (1)',         mult: 5.00, check: v => v === 1 },
-      outer:    { label: 'Внешнее кольцо (2–3)', mult: 2.50, check: v => v >= 2 && v <= 3 },
-      hit:      { label: 'Попадание (2–5)',  mult: 1.50, check: v => v >= 2 && v <= 5 },
-      inner:    { label: 'Внутр. кольцо (4–5)', mult: 2.80, check: v => v >= 4 && v <= 5 },
-      bullseye: { label: 'Яблочко 🎯 (6)',   mult: 5.00, check: v => v === 6 },
+      miss:     { label: 'Мимо (1)',           mult: 5.00, check: v => v === 1 },
+      outer:    { label: 'Внешнее (2–3)',      mult: 2.50, check: v => v >= 2 && v <= 3 },
+      hit:      { label: 'Попадание (2–5)',    mult: 1.50, check: v => v >= 2 && v <= 5 },
+      inner:    { label: 'Внутреннее (4–5)',   mult: 2.80, check: v => v >= 4 && v <= 5 },
+      bullseye: { label: 'Яблочко 🎯 (6)',     mult: 5.00, check: v => v === 6 },
+      even:     { label: 'Чёт (2,4,6)',        mult: 1.95, check: v => v % 2 === 0 },
+      odd:      { label: 'Нечёт (1,3,5)',      mult: 1.95, check: v => v % 2 !== 0 },
+      ladder:   { label: 'Лесенка',            mult: 2.20, mult3: 5.20, minThrows: 2, checkMulti: vals => vals.every((v, i) => i === 0 || v > vals[i - 1]) },
     }
   },
   basketball: {
@@ -5001,9 +5048,13 @@ const GAME_CONFIG = {
     name: 'Баскетбол',
     maxVal: 5,
     outcomes: {
-      miss:   { label: 'Мимо (1–3)',         mult: 3.50, check: v => v <= 3 },
-      score:  { label: 'Попадание 🏀 (4–5)', mult: 1.95, check: v => v >= 4 },
+      miss:   { label: 'Мимо (1–3)',          mult: 1.65, check: v => v <= 3 },
+      score:  { label: 'Попадание 🏀 (4–5)',  mult: 2.35, check: v => v >= 4 },
       swish:  { label: 'Чистый бросок 🔥 (5)',mult: 4.50, check: v => v === 5 },
+      rim:    { label: 'От щита (4)',         mult: 4.50, check: v => v === 4 },
+      even:   { label: 'Чёт (2,4)',           mult: 2.35, check: v => v % 2 === 0 },
+      odd:    { label: 'Нечёт (1,3,5)',       mult: 1.65, check: v => v % 2 !== 0 },
+      exact3: { label: 'Обод (3)',            mult: 4.50, check: v => v === 3 },
     }
   },
   football: {
@@ -5011,9 +5062,13 @@ const GAME_CONFIG = {
     name: 'Футбол',
     maxVal: 5,
     outcomes: {
-      miss:       { label: 'Мимо (1–2)',           mult: 3.50, check: v => v <= 2 },
-      goal:       { label: 'Гол ⚽ (3–5)',          mult: 1.95, check: v => v >= 3 },
-      top_corner: { label: 'В девятку 🔥 (5)',      mult: 5.00, check: v => v === 5 },
+      miss:       { label: 'Мимо (1–2)',      mult: 2.40, check: v => v <= 2 },
+      goal:       { label: 'Гол ⚽ (3–5)',     mult: 1.65, check: v => v >= 3 },
+      top_corner: { label: 'В девятку 🔥 (5)', mult: 4.60, check: v => v === 5 },
+      post:       { label: 'Штанга (2)',      mult: 4.60, check: v => v === 2 },
+      mid_goal:   { label: 'По центру (3–4)', mult: 2.40, check: v => v >= 3 && v <= 4 },
+      even:       { label: 'Чёт (2,4)',       mult: 2.40, check: v => v % 2 === 0 },
+      odd:        { label: 'Нечёт (1,3,5)',   mult: 1.65, check: v => v % 2 !== 0 },
     }
   },
   slots: {

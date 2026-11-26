@@ -512,3 +512,203 @@
   border-color: rgba(255, 255, 255, 0.05);
   box-shadow: none;
 }
+
+/* ── Top Game Switcher & Throws Selector ── */
+.emoji-top-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.emoji-game-switcher {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 4px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.emoji-switch-btn {
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  opacity: 0.65;
+}
+
+.emoji-switch-btn:hover:not(:disabled) {
+  opacity: 0.95;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.emoji-switch-btn.active {
+  opacity: 1;
+  background: rgba(0, 230, 153, 0.16);
+  border-color: rgba(0, 230, 153, 0.38);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.emoji-throws-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 3px;
+}
+
+.emoji-throw-btn {
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #8a90a2;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.emoji-throw-btn.active {
+  background: rgba(0, 230, 153, 0.16);
+  border-color: rgba(0, 230, 153, 0.35);
+  color: #00e699;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+/* ── Compact Tabbed Outcome Card ── */
+.emoji-outcomes-card {
+  background: rgba(255, 255, 255, 0.036);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.emoji-cat-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.emoji-cat-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 3px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.emoji-cat-tab {
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #8a90a2;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.emoji-cat-tab.active {
+  background: rgba(0, 230, 153, 0.16);
+  color: #00e699;
+}
+
+.emoji-selected-chip {
+  font-size: 11px;
+  font-weight: 700;
+  color: #00e699;
+  background: rgba(0, 230, 153, 0.1);
+  border: 1px solid rgba(0, 230, 153, 0.25);
+  padding: 3px 9px;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.emoji-outcomes-grid-dynamic {
+  display: grid;
+  gap: 7px;
+}
+
+.emoji-outcome-btn-v2 {
+  min-height: 42px;
+  padding: 8px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.035);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.emoji-outcome-btn-v2:hover:not(:disabled) {
+  border-color: rgba(0, 230, 153, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.emoji-outcome-btn-v2:active:not(:disabled) {
+  transform: scale(0.975);
+}
+
+.emoji-outcome-btn-v2.active {
+  background: rgba(0, 230, 153, 0.15);
+  border-color: rgba(0, 230, 153, 0.65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 14px rgba(0, 230, 153, 0.18);
+}
+
+.emoji-outcome-v2-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.emoji-outcome-v2-mult {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #8a90a2;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 7px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.emoji-outcome-btn-v2.active .emoji-outcome-v2-mult {
+  color: #05140d;
+  background: #00e699;
+}
+
+.emoji-outcome-btn-v2.requires-multi .emoji-outcome-v2-mult {
+  color: #00e699;
+  background: rgba(0, 230, 153, 0.1);
+}
