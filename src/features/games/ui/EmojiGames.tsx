@@ -9,14 +9,13 @@ import './Games.css';
 import './EmojiGames.css';
 
 // ─── Game configs (must mirror server GAME_CONFIG) ───────────────────────────
-const GAMES = [
+const GAMES: any[] = [
   {
     id: 'dice',
     emoji: '🎲',
     title: 'Кости',
     desc: 'Угадай цифру, диапазон или комбо',
-    minMult: 1.95,
-    maxMult: 28.0,
+    maxThrows: 3,
     color: '#00e699',
     tabs: [
       { id: 'main', label: 'Основные', cols: 2 },
@@ -24,65 +23,77 @@ const GAMES = [
       { id: 'combo', label: 'Комбо', cols: 2 }
     ],
     outcomes: [
-      { key: 'even',   label: 'Чёт',          mult: 1.95, tab: 'main' },
-      { key: 'odd',    label: 'Нечёт',        mult: 1.95, tab: 'main' },
-      { key: 'under',  label: 'Меньше (1–3)', mult: 1.95, tab: 'main' },
-      { key: 'over',   label: 'Больше (4–6)', mult: 1.95, tab: 'main' },
-      { key: '1',      label: '1 ⚀',          mult: 5.80, tab: 'exact' },
-      { key: '2',      label: '2 ⚁',          mult: 5.80, tab: 'exact' },
-      { key: '3',      label: '3 ⚂',          mult: 5.80, tab: 'exact' },
-      { key: '4',      label: '4 ⚃',          mult: 5.80, tab: 'exact' },
-      { key: '5',      label: '5 ⚄',          mult: 5.80, tab: 'exact' },
-      { key: '6',      label: '6 ⚅',          mult: 5.80, tab: 'exact' },
-      { key: 'low2',   label: '1–2 Низ',      mult: 2.85, tab: 'combo' },
-      { key: 'mid2',   label: '3–4 Центр',    mult: 2.85, tab: 'combo' },
-      { key: 'high2',  label: '5–6 Верх',     mult: 2.85, tab: 'combo' },
-      { key: 'ladder', label: 'Лесенка',      mult: 2.20, mult3: 5.20, minThrows: 2, tab: 'combo' },
-      { key: 'double', label: 'Совпадение',   mult: 5.50, mult3: 28.0, minThrows: 2, tab: 'combo' },
+      { key: 'even',      label: 'Чёт',          label2: 'Оба чётных', label3: 'Три чётных', mult: 2, mult2: 4, mult3: 8, tab: 'main' },
+      { key: 'odd',       label: 'Нечёт',        label2: 'Оба нечёт',  label3: 'Три нечёт',  mult: 2, mult2: 4, mult3: 8, tab: 'main' },
+      { key: 'under',     label: 'Меньше',       label2: 'Оба меньше', label3: 'Три меньше', mult: 2, mult2: 4, mult3: 8, tab: 'main' },
+      { key: 'over',      label: 'Больше',       label2: 'Оба больше', label3: 'Три больше', mult: 2, mult2: 4, mult3: 8, tab: 'main' },
+      { key: 'd1gt2',     label: 'Куб 1 > 2',    mult: 2.4,  throws: [2], tab: 'main' },
+      { key: 'd1lt2',     label: 'Куб 1 < 2',    mult: 2.4,  throws: [2], tab: 'main' },
+      { key: 'desc',      label: 'Убывание',     mult: 10.8, throws: [3], tab: 'main' },
+      { key: 'asc',       label: 'Возрастание',  mult: 10.8, throws: [3], tab: 'main' },
+      { key: '1',         label: '1',            mult: 6, mult2: 36, mult3: 216, tab: 'exact' },
+      { key: '2',         label: '2',            mult: 6, mult2: 36, mult3: 216, tab: 'exact' },
+      { key: '3',         label: '3',            mult: 6, mult2: 36, mult3: 216, tab: 'exact' },
+      { key: '4',         label: '4',            mult: 6, mult2: 36, mult3: 216, tab: 'exact' },
+      { key: '5',         label: '5',            mult: 6, mult2: 36, mult3: 216, tab: 'exact' },
+      { key: '6',         label: '6',            mult: 6, mult2: 36, mult3: 216, tab: 'exact' },
+      { key: 'ladder',    label: 'Лесенка',      mult: 2.2,  throws: [1], tab: 'combo' },
+      { key: 'sum',       label: 'Сумма',        mult: 12,   mult3: 54, prefix: 'до ', throws: [2, 3], tab: 'combo' },
+      { key: 'double',    label: 'Любой дубль',  mult: 6,    throws: [2], tab: 'combo' },
+      { key: 'diff',      label: 'Разница',      mult: 18,   prefix: 'до ', throws: [2], tab: 'combo' },
+      { key: 'prod_gt18', label: 'Произвед > 18',mult: 4.5,  throws: [2], tab: 'combo' },
+      { key: 'triple',    label: 'Любой трипл',  mult: 36,   throws: [3], tab: 'combo' },
+      { key: 'duel',      label: 'Дуэль',        mult: 3.92, throws: [3], tab: 'combo' },
+      { key: 'straight',  label: 'Стрит',        mult: 9,    throws: [3], tab: 'combo' },
+      { key: 'prod_gt108',label: 'Произвед > 108',mult: 12.7,throws: [3], tab: 'combo' },
     ]
   },
   {
     id: 'football',
     emoji: '⚽️',
     title: 'Футбол',
-    desc: 'Гол, штанга, девятка или чёт/нечёт',
-    minMult: 1.65,
-    maxMult: 4.60,
+    desc: 'Выбери исход удара',
+    maxThrows: 2,
     color: '#00e699',
     tabs: [
       { id: 'main', label: 'Основные', cols: 2 },
-      { id: 'more', label: 'Точные и Чёт', cols: 2 }
+      { id: 'combo', label: 'Комбо (2 бр.)', cols: 2 }
     ],
     outcomes: [
-      { key: 'goal',       label: 'Гол (3–5)',      mult: 1.65, tab: 'main' },
-      { key: 'miss',       label: 'Мимо (1–2)',     mult: 2.40, tab: 'main' },
-      { key: 'top_corner', label: 'В девятку (5)',  mult: 4.60, tab: 'main' },
-      { key: 'post',       label: 'Штанга (2)',     mult: 4.60, tab: 'main' },
-      { key: 'mid_goal',   label: 'По центру (3–4)',mult: 2.40, tab: 'more' },
-      { key: 'even',       label: 'Чёт (2,4)',      mult: 2.40, tab: 'more' },
-      { key: 'odd',        label: 'Нечёт (1,3,5)',  mult: 1.65, tab: 'more' },
+      { key: 'goal_center',      label: 'Гол в центр',      mult: 5,    mult2: 25,   tab: 'main' },
+      { key: 'goal_corner',      label: 'Гол в угол',       mult: 5,    mult2: 25,   tab: 'main' },
+      { key: 'goal_post',        label: 'Гол от штанги',    mult: 5,    mult2: 25,   tab: 'main' },
+      { key: 'goal',             label: 'Любой гол',        mult: 1.66, mult2: 2.77, tab: 'main' },
+      { key: 'post',             label: 'Удар об штангу',   mult: 2.5,  mult2: 6.25, tab: 'main' },
+      { key: 'miss',             label: 'Промах',           mult: 2.5,  mult2: 6.25, tab: 'main' },
+      { key: 'double',           label: 'Любой дубль',      mult: 5,    throws: [2], tab: 'combo' },
+      { key: 'goal_miss',        label: 'Гол-Промах',       mult: 4.16, throws: [2], tab: 'combo' },
+      { key: 'miss_goal',        label: 'Промах-Гол',       mult: 4.16, throws: [2], tab: 'combo' },
+      { key: 'one_goal_one_miss',label: '1 Гол и 1 Промах', mult: 2.08, throws: [2], tab: 'combo' },
     ]
   },
   {
     id: 'basketball',
     emoji: '🏀',
     title: 'Баскетбол',
-    desc: 'Попадание, от щита или чистый бросок',
-    minMult: 1.65,
-    maxMult: 4.50,
+    desc: 'Выбери исход броска',
+    maxThrows: 2,
     color: '#00e699',
     tabs: [
       { id: 'main', label: 'Основные', cols: 2 },
-      { id: 'more', label: 'Точные и Чёт', cols: 2 }
+      { id: 'combo', label: 'Комбо (2 бр.)', cols: 2 }
     ],
     outcomes: [
-      { key: 'score',  label: 'Попадание (4–5)', mult: 2.35, tab: 'main' },
-      { key: 'miss',   label: 'Мимо (1–3)',      mult: 1.65, tab: 'main' },
-      { key: 'swish',  label: 'Чистый (5)',      mult: 4.50, tab: 'main' },
-      { key: 'rim',    label: 'От щита (4)',     mult: 4.50, tab: 'main' },
-      { key: 'exact3', label: 'Обод (3)',        mult: 4.50, tab: 'more' },
-      { key: 'even',   label: 'Чёт (2,4)',       mult: 2.35, tab: 'more' },
-      { key: 'odd',    label: 'Нечёт (1,3,5)',   mult: 1.65, tab: 'more' },
+      { key: 'swish',            label: 'Чистый гол',       mult: 5,    mult2: 25,   tab: 'main' },
+      { key: 'spin',             label: 'Прокрут',          mult: 2.5,  mult2: 6.25, tab: 'main' },
+      { key: 'stuck',            label: 'Застрял мяч',      mult: 5,    mult2: 25,   tab: 'main' },
+      { key: 'goal',             label: 'Любой гол',        mult: 2.5,  mult2: 6.25, tab: 'main' },
+      { key: 'bounce',           label: 'Отскок',           mult: 5,    mult2: 25,   tab: 'main' },
+      { key: 'miss',             label: 'Промах',           mult: 1.66, mult2: 2.77, tab: 'main' },
+      { key: 'double',           label: 'Любой дубль',      mult: 5,    throws: [2], tab: 'combo' },
+      { key: 'goal_miss',        label: 'Гол-Промах',       mult: 4.16, throws: [2], tab: 'combo' },
+      { key: 'miss_goal',        label: 'Промах-Гол',       mult: 4.16, throws: [2], tab: 'combo' },
+      { key: 'one_goal_one_miss',label: '1 Гол и 1 Промах', mult: 2.08, throws: [2], tab: 'combo' },
     ]
   },
   {
@@ -90,22 +101,24 @@ const GAMES = [
     emoji: '🎯',
     title: 'Дартс',
     desc: 'Куда попадёт дротик?',
-    minMult: 1.50,
-    maxMult: 5.00,
+    maxThrows: 2,
     color: '#00e699',
     tabs: [
       { id: 'main', label: 'Основные', cols: 2 },
-      { id: 'more', label: 'Кольца и Чёт', cols: 2 }
+      { id: 'combo', label: 'Комбо (2 бр.)', cols: 2 }
     ],
     outcomes: [
-      { key: 'hit',      label: 'Попадание (2–5)', mult: 1.50, tab: 'main' },
-      { key: 'miss',     label: 'Мимо (1)',        mult: 5.00, tab: 'main' },
-      { key: 'bullseye', label: 'Яблочко (6)',     mult: 5.00, tab: 'main' },
-      { key: 'inner',    label: 'Внутр. (4–5)',    mult: 2.80, tab: 'main' },
-      { key: 'outer',    label: 'Внешнее (2–3)',   mult: 2.50, tab: 'more' },
-      { key: 'even',     label: 'Чёт (2,4,6)',     mult: 1.95, tab: 'more' },
-      { key: 'odd',      label: 'Нечёт (1,3,5)',   mult: 1.95, tab: 'more' },
-      { key: 'ladder',   label: 'Лесенка',         mult: 2.20, mult3: 5.20, minThrows: 2, tab: 'more' },
+      { key: 'bullseye',       label: '🎯 Центр',           mult: 6,    mult2: 36,   tab: 'main' },
+      { key: 'red_sector',     label: '🔴 Сектор',          mult: 3,    mult2: 9,    tab: 'main' },
+      { key: 'bounce',         label: 'Отскок',             mult: 6,    mult2: 36,   tab: 'main' },
+      { key: 'white_sector',   label: '⚪ Сектор',          mult: 3,    mult2: 9,    tab: 'main' },
+      { key: 'any_sector',     label: 'Любой сектор',       mult: 1.5,  mult2: 2.25, tab: 'main' },
+      { key: 'red_or_center',  label: '🔴 Сектор / Центр',  mult: 2,    mult2: 4,    tab: 'main' },
+      { key: 'white_or_bounce',label: '⚪ Сектор / Отскок', mult: 2,    mult2: 4,    tab: 'main' },
+      { key: 'near',           label: 'Рядом',              mult: 4.5,  throws: [2],  tab: 'combo' },
+      { key: 'double',         label: 'Любой дубль',        mult: 6,    throws: [2],  tab: 'combo' },
+      { key: 'duel',           label: 'Дуэль',              mult: 2.4,  prefix: 'до ', throws: [2], tab: 'combo' },
+      { key: 'traffic_light',  label: 'Светофор',           mult: 3,    throws: [2],  tab: 'combo' },
     ]
   },
   {
@@ -113,46 +126,67 @@ const GAMES = [
     emoji: '🎳',
     title: 'Боулинг',
     desc: 'Сколько кеглей собьёт шар?',
-    minMult: 1.70,
-    maxMult: 4.00,
+    maxThrows: 2,
     color: '#00e699',
     tabs: [
       { id: 'main', label: 'Основные', cols: 2 },
-      { id: 'more', label: 'Чёт / Комбо', cols: 2 }
+      { id: 'combo', label: 'Комбо (2 бр.)', cols: 2 }
     ],
     outcomes: [
-      { key: 'pins4',   label: '4+ кегли',     mult: 1.70, tab: 'main' },
-      { key: 'pins5',   label: '5–6 кеглей',   mult: 2.80, tab: 'main' },
-      { key: 'strike',  label: 'Страйк (6/6)', mult: 4.00, tab: 'main' },
-      { key: 'gutter',  label: 'Гаттер (1–2)', mult: 2.85, tab: 'main' },
-      { key: 'partial', label: '3–5 кеглей',   mult: 1.85, tab: 'more' },
-      { key: 'even',    label: 'Чёт (2,4,6)',  mult: 1.95, tab: 'more' },
-      { key: 'odd',     label: 'Нечёт (1,3,5)',mult: 1.95, tab: 'more' },
-      { key: 'ladder',  label: 'Лесенка',      mult: 2.20, mult3: 5.20, minThrows: 2, tab: 'more' },
+      { key: 'strike',    label: '🎳 Страйк',     mult: 6,    mult2: 36,  tab: 'main' },
+      { key: 'miss',      label: 'Промах',        mult: 6,    mult2: 36,  tab: 'main' },
+      { key: 'pins1',     label: 'Сбито 1 / 6',   mult: 6,    mult2: 36,  tab: 'main' },
+      { key: 'pins3',     label: 'Сбито 3 / 6',   mult: 6,    mult2: 36,  tab: 'main' },
+      { key: 'pins4',     label: 'Сбито 4 / 6',   mult: 6,    mult2: 36,  tab: 'main' },
+      { key: 'pins5',     label: 'Сбито 5 / 6',   mult: 6,    mult2: 36,  tab: 'main' },
+      { key: 'no_strike', label: 'Без страйка',   mult: 1.44, throws: [2], tab: 'combo' },
+      { key: 'no_miss',   label: 'Без промаха',   mult: 1.44, throws: [2], tab: 'combo' },
+      { key: 'double',    label: 'Любой дубль',   mult: 6,    throws: [2], tab: 'combo' },
+      { key: 'b1gt2',     label: '🎳 1 > 2',      mult: 2.4,  throws: [2], tab: 'combo' },
+      { key: 'b1lt2',     label: '🎳 1 < 2',      mult: 2.4,  throws: [2], tab: 'combo' },
+      { key: 'sum',       label: 'Сумма сбитых',  mult: 9,    prefix: 'до ', throws: [2], tab: 'combo' },
     ]
   },
   {
     id: 'slots',
     emoji: '🎰',
     title: 'Слоты',
-    desc: 'Крути барабан! До ×25',
-    minMult: 1.80,
-    maxMult: 25.00,
+    desc: 'Выбери комбинацию и крути!',
+    maxThrows: 2,
     color: '#00e699',
-    tabs: [],
+    tabs: [
+      { id: 'main', label: 'Комбинации', cols: 2 }
+    ],
     outcomes: [
-      { key: 'spin', label: 'Крутить барабан', mult: null, isAuto: true }
+      { key: 'three_sevens',  label: '7️⃣ 3 Семёрки',       mult: 64,   throws: [1], tab: 'main' },
+      { key: 'three_lemons',  label: '🍋 3 Лимона',         mult: 64,   throws: [1], tab: 'main' },
+      { key: 'three_grapes',  label: '🍇 3 Винограда',      mult: 64,   throws: [1], tab: 'main' },
+      { key: 'three_bars',    label: '🍫 3 Бара',           mult: 64,   throws: [1], tab: 'main' },
+      { key: 'any_combo',     label: 'Любая комбинация',    mult: 16,   throws: [1], tab: 'main' },
+      { key: 'unique',        label: 'Уникальные символы',  mult: 2.66, mult2: 7.11, tab: 'main' },
+      { key: 'exact',         label: 'Точный исход',        mult: 7.11, prefix: 'до ', throws: [1], tab: 'main' },
+      { key: 'duel',          label: 'Дуэль',               mult: 5.05, prefix: 'до ', throws: [2], tab: 'main' },
+      { key: 'combo',         label: 'Комбо',               mult: 400,  prefix: 'до ', throws: [2], tab: 'main' },
+      { key: 'one_two_combo', label: '1-2 Любые комбинации',mult: 8.25, throws: [2], tab: 'main' },
+      { key: 'two_combos',    label: '2 Любые комбинации',  mult: 256,  throws: [2], tab: 'main' },
     ]
   },
 ];
 
+function getOutcomeLabel(outcome, throwsCount) {
+  if (!outcome) return '';
+  if (throwsCount === 3 && outcome.label3) return outcome.label3;
+  if (throwsCount === 2 && outcome.label2) return outcome.label2;
+  return outcome.label;
+}
+
 function getEffectiveMult(outcome, throwsCount) {
   if (!outcome || !outcome.mult) return null;
-  if (outcome.minThrows) {
-    return throwsCount === 3 && outcome.mult3 ? outcome.mult3 : outcome.mult;
-  }
-  if (throwsCount === 1) return outcome.mult;
-  return parseFloat(Math.min(50, Math.pow(outcome.mult, throwsCount) * 0.92).toFixed(2));
+  if (throwsCount === 3 && outcome.mult3) return outcome.mult3;
+  if (throwsCount === 2 && outcome.mult2) return outcome.mult2;
+  if (outcome.throws && !outcome.throws.includes(throwsCount)) return outcome.mult;
+  if (throwsCount === 1 || (outcome.throws && outcome.throws.includes(throwsCount))) return outcome.mult;
+  return parseFloat(Math.pow(outcome.mult, throwsCount).toFixed(2));
 }
 
 function triggerHaptic(style: any = 'medium') {
@@ -291,38 +325,19 @@ function LobbyScreen({ onSelectGame, onBack }) {
 function OutcomePicker({ game, selectedOutcome, throwsCount, onSelect, onSelectThrows, isRolling }) {
   const [activeCatTab, setActiveCatTab] = useState(game.tabs?.[0]?.id || 'main');
 
+  const isOutcomeAvailable = (o: any, t: number) => !o.throws || o.throws.includes(t);
+  const availableTabs = (game.tabs || [{ id: 'main', label: 'Основные', cols: 2 }]).filter(t =>
+    game.outcomes.some(o => o.tab === t.id && isOutcomeAvailable(o, throwsCount))
+  );
+
   useEffect(() => {
-    setActiveCatTab(game.tabs?.[0]?.id || 'main');
-  }, [game.id]);
+    if (!availableTabs.some(t => t.id === activeCatTab)) {
+      setActiveCatTab(availableTabs[0]?.id || 'main');
+    }
+  }, [game.id, throwsCount]);
 
-  if (game.id === 'slots') {
-    return (
-      <div className="emoji-slots-table">
-        <div className="emoji-section-header" style={{ marginBottom: '8px' }}>
-          <span className="emoji-section-title">Таблица выплат</span>
-          <span style={{ fontSize: '11px', color: '#00e699', fontWeight: 800 }}>Макс. ×25</span>
-        </div>
-        {[
-          { symbols: '🍋 🍋 🍋', name: 'Джекпот 777', mult: '×25', color: '#00e699' },
-          { symbols: '🍒 🍒 🍒', name: '3 одинаковых', mult: '×5', color: '#e2e8f0' },
-          { symbols: '🍊 🍊 🔔', name: '2 одинаковых', mult: '×1.8', color: '#cbd5e1' },
-          { symbols: '🍒 🍊 🍋', name: 'Нет совпадений', mult: '×0', color: '#6b7280' },
-        ].map(tier => (
-          <div key={tier.name} className="emoji-slots-row">
-            <div style={{ display: 'flex', alignItems: 'center' }}>
-              <span className="emoji-slots-syms">{tier.symbols}</span>
-              <span className="emoji-slots-name">{tier.name}</span>
-            </div>
-            <span className="emoji-slots-mult" style={{ color: tier.color }}>{tier.mult}</span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  const tabs = game.tabs || [{ id: 'main', label: 'Основные', cols: 2 }];
-  const currentTab = tabs.find(t => t.id === activeCatTab) || tabs[0];
-  const visibleOutcomes = game.outcomes.filter(o => o.tab === currentTab.id);
+  const currentTab = availableTabs.find(t => t.id === activeCatTab) || availableTabs[0] || { id: 'main', label: 'Основные', cols: 2 };
+  const visibleOutcomes = game.outcomes.filter(o => o.tab === currentTab.id && isOutcomeAvailable(o, throwsCount));
   const selectedObj = game.outcomes.find(o => o.key === selectedOutcome);
   const selectedMult = getEffectiveMult(selectedObj, throwsCount);
 
@@ -331,7 +346,7 @@ function OutcomePicker({ game, selectedOutcome, throwsCount, onSelect, onSelectT
       {/* Category Tabs + Active Outcome Pill */}
       <div className="emoji-cat-bar">
         <div className="emoji-cat-tabs">
-          {tabs.map(t => (
+          {availableTabs.map(t => (
             <button
               key={t.id}
               type="button"
@@ -345,7 +360,7 @@ function OutcomePicker({ game, selectedOutcome, throwsCount, onSelect, onSelectT
         </div>
         {selectedObj && (
           <span className="emoji-selected-chip">
-            {selectedObj.label} · ×{selectedMult}
+            {getOutcomeLabel(selectedObj, throwsCount)} · {selectedObj.prefix || ''}×{selectedMult}
           </span>
         )}
       </div>
@@ -358,24 +373,20 @@ function OutcomePicker({ game, selectedOutcome, throwsCount, onSelect, onSelectT
         {visibleOutcomes.map(o => {
           const isSel = selectedOutcome === o.key;
           const mult = getEffectiveMult(o, throwsCount);
-          const needsMoreThrows = o.minThrows && throwsCount < o.minThrows;
           return (
             <button
               key={o.key}
               type="button"
               disabled={isRolling}
-              className={`emoji-outcome-btn-v2 ${isSel ? 'active' : ''} ${needsMoreThrows ? 'requires-multi' : ''}`}
+              className={`emoji-outcome-btn-v2 ${isSel ? 'active' : ''}`}
               onClick={() => {
-                if (needsMoreThrows && onSelectThrows) {
-                  onSelectThrows(o.minThrows);
-                }
                 onSelect(o.key);
                 triggerHaptic('light');
               }}
             >
-              <span className="emoji-outcome-v2-label">{o.label}</span>
+              <span className="emoji-outcome-v2-label">{getOutcomeLabel(o, throwsCount)}</span>
               <span className="emoji-outcome-v2-mult">
-                {needsMoreThrows ? `${o.minThrows}+ бр.` : `×${mult}`}
+                {o.prefix || ''}×{mult}
               </span>
             </button>
           );
@@ -415,8 +426,9 @@ function GameScreen({ gameId, onSelectGame, onBack, onBackToLobby }) {
     setLastResult(null);
     setShowResult(false);
     const curOutcome: any = game?.outcomes.find(o => o.key === selectedOutcome);
-    if (curOutcome?.minThrows && count < curOutcome.minThrows) {
-      setSelectedOutcome(game?.outcomes[0]?.key || '');
+    if (curOutcome?.throws && !curOutcome.throws.includes(count)) {
+      const firstValid = game?.outcomes.find(o => !o.throws || o.throws.includes(count));
+      if (firstValid) setSelectedOutcome(firstValid.key);
     }
     triggerHaptic('light');
   };
@@ -543,7 +555,7 @@ function GameScreen({ gameId, onSelectGame, onBack, onBackToLobby }) {
           </div>
 
           <div className="emoji-throws-bar">
-            {[1, 2, 3].map(cnt => (
+            {Array.from({ length: game.maxThrows || 2 }, (_, i) => i + 1).map(cnt => (
               <button
                 key={cnt}
                 type="button"
@@ -551,7 +563,7 @@ function GameScreen({ gameId, onSelectGame, onBack, onBackToLobby }) {
                 className={`emoji-throw-btn ${throwsCount === cnt ? 'active' : ''}`}
                 onClick={() => handleSelectThrows(cnt)}
               >
-                {cnt} {isSlots ? (cnt === 1 ? 'Спин' : 'Спина') : (cnt === 1 ? 'Бросок' : 'Броска')}
+                {cnt} {cnt === 1 ? 'Бросок' : 'Броска'}
               </button>
             ))}
           </div>

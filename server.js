@@ -2541,30 +2541,25 @@ app.post('/api/games/emoji-roll', (req, res) => {
   const rollOne = () => Math.floor(Math.random() * maxVal) + 1;
 
   const evaluateRoll = (vals) => {
-    if (game === 'slots') {
-      // For slots with multiple spins, take best hit or sum? Take highest multiplier hit
-      let bestMult = 0;
-      let anyWin = false;
-      for (const v of vals) {
-        if (v === 64) { anyWin = true; bestMult = Math.max(bestMult, 25.0); }
-        else if ([1, 22, 43].includes(v)) { anyWin = true; bestMult = Math.max(bestMult, 5.0); }
-        else if (v % 16 === 0 || v === 32 || v === 48) { anyWin = true; bestMult = Math.max(bestMult, 1.8); }
-      }
-      return { isWin: anyWin, mult: anyWin ? parseFloat((bestMult / Math.pow(vals.length, 0.35)).toFixed(2)) : 0 };
+    if (outcomeInfo.evalMulti) {
+      return outcomeInfo.evalMulti(vals);
     }
 
     if (outcomeInfo.checkMulti) {
       const won = outcomeInfo.checkMulti(vals);
-      const mult = throwsCount === 3 && outcomeInfo.mult3 ? outcomeInfo.mult3 : outcomeInfo.mult;
+      const mult = throwsCount === 3 && outcomeInfo.mult3
+        ? outcomeInfo.mult3
+        : (throwsCount === 2 && outcomeInfo.mult2 ? outcomeInfo.mult2 : outcomeInfo.mult);
       return { isWin: won, mult };
     }
 
     const won = vals.every(v => outcomeInfo.check(v));
-    // Scale multiplier fairly when requiring all 2 or 3 throws to hit
-    const scaledMult = throwsCount === 1
-      ? outcomeInfo.mult
-      : parseFloat(Math.min(50, Math.pow(outcomeInfo.mult, throwsCount) * 0.92).toFixed(2));
-    return { isWin: won, mult: scaledMult };
+    const exactMult = throwsCount === 3 && outcomeInfo.mult3
+      ? outcomeInfo.mult3
+      : (throwsCount === 2 && outcomeInfo.mult2 ? outcomeInfo.mult2 : (
+        throwsCount === 1 ? outcomeInfo.mult : parseFloat(Math.pow(outcomeInfo.mult, throwsCount).toFixed(2))
+      ));
+    return { isWin: won, mult: exactMult };
   };
 
   let values = Array.from({ length: throwsCount }, rollOne);
@@ -5223,65 +5218,40 @@ const GAME_CONFIG = {
     name: 'Кости',
     maxVal: 6,
     outcomes: {
-      under:  { label: 'Меньше (1–3)', mult: 1.95, check: v => v <= 3 },
-      over:   { label: 'Больше (4–6)', mult: 1.95, check: v => v >= 4 },
-      even:   { label: 'Чётное',       mult: 1.95, check: v => v % 2 === 0 },
-      odd:    { label: 'Нечётное',     mult: 1.95, check: v => v % 2 !== 0 },
-      low2:   { label: '1–2 Низ',      mult: 2.85, check: v => v <= 2 },
-      mid2:   { label: '3–4 Центр',    mult: 2.85, check: v => v >= 3 && v <= 4 },
-      high2:  { label: '5–6 Верх',     mult: 2.85, check: v => v >= 5 },
-      '1':    { label: 'Точно 1 ⚀',    mult: 5.80, check: v => v === 1 },
-      '2':    { label: 'Точно 2 ⚁',    mult: 5.80, check: v => v === 2 },
-      '3':    { label: 'Точно 3 ⚂',    mult: 5.80, check: v => v === 3 },
-      '4':    { label: 'Точно 4 ⚃',    mult: 5.80, check: v => v === 4 },
-      '5':    { label: 'Точно 5 ⚄',    mult: 5.80, check: v => v === 5 },
-      '6':    { label: 'Точно 6 ⚅',    mult: 5.80, check: v => v === 6 },
-      ladder: { label: 'Лесенка',      mult: 2.20, mult3: 5.20, minThrows: 2, checkMulti: vals => vals.every((v, i) => i === 0 || v > vals[i - 1]) },
-      double: { label: 'Совпадение',   mult: 5.50, mult3: 28.0, minThrows: 2, checkMulti: vals => vals.every(v => v === vals[0]) },
-    }
-  },
-  bowling: {
-    emoji: '🎳',
-    name: 'Боулинг',
-    maxVal: 6,
-    outcomes: {
-      gutter:  { label: 'Гаттер (1–2)',    mult: 2.85, check: v => v <= 2 },
-      partial: { label: '3–5 кеглей',      mult: 1.85, check: v => v >= 3 && v <= 5 },
-      pins4:   { label: '4+ кегли',        mult: 1.70, check: v => v >= 4 },
-      pins5:   { label: '5–6 кеглей',      mult: 2.80, check: v => v >= 5 },
-      strike:  { label: 'Страйк 🎳 (6/6)', mult: 4.00, check: v => v === 6 },
-      even:    { label: 'Чёт (2,4,6)',     mult: 1.95, check: v => v % 2 === 0 },
-      odd:     { label: 'Нечёт (1,3,5)',   mult: 1.95, check: v => v % 2 !== 0 },
-      ladder:  { label: 'Лесенка',         mult: 2.20, mult3: 5.20, minThrows: 2, checkMulti: vals => vals.every((v, i) => i === 0 || v > vals[i - 1]) },
-    }
-  },
-  darts: {
-    emoji: '🎯',
-    name: 'Дартс',
-    maxVal: 6,
-    outcomes: {
-      miss:     { label: 'Мимо (1)',           mult: 5.00, check: v => v === 1 },
-      outer:    { label: 'Внешнее (2–3)',      mult: 2.50, check: v => v >= 2 && v <= 3 },
-      hit:      { label: 'Попадание (2–5)',    mult: 1.50, check: v => v >= 2 && v <= 5 },
-      inner:    { label: 'Внутреннее (4–5)',   mult: 2.80, check: v => v >= 4 && v <= 5 },
-      bullseye: { label: 'Яблочко 🎯 (6)',     mult: 5.00, check: v => v === 6 },
-      even:     { label: 'Чёт (2,4,6)',        mult: 1.95, check: v => v % 2 === 0 },
-      odd:      { label: 'Нечёт (1,3,5)',      mult: 1.95, check: v => v % 2 !== 0 },
-      ladder:   { label: 'Лесенка',            mult: 2.20, mult3: 5.20, minThrows: 2, checkMulti: vals => vals.every((v, i) => i === 0 || v > vals[i - 1]) },
-    }
-  },
-  basketball: {
-    emoji: '🏀',
-    name: 'Баскетбол',
-    maxVal: 5,
-    outcomes: {
-      miss:   { label: 'Мимо (1–3)',          mult: 1.65, check: v => v <= 3 },
-      score:  { label: 'Попадание 🏀 (4–5)',  mult: 2.35, check: v => v >= 4 },
-      swish:  { label: 'Чистый бросок 🔥 (5)',mult: 4.50, check: v => v === 5 },
-      rim:    { label: 'От щита (4)',         mult: 4.50, check: v => v === 4 },
-      even:   { label: 'Чёт (2,4)',           mult: 2.35, check: v => v % 2 === 0 },
-      odd:    { label: 'Нечёт (1,3,5)',       mult: 1.65, check: v => v % 2 !== 0 },
-      exact3: { label: 'Обод (3)',            mult: 4.50, check: v => v === 3 },
+      even:      { label: 'Чёт',               mult: 2.0,  mult2: 4.0,  mult3: 8.0,  check: v => v % 2 === 0 },
+      odd:       { label: 'Нечёт',             mult: 2.0,  mult2: 4.0,  mult3: 8.0,  check: v => v % 2 !== 0 },
+      under:     { label: 'Меньше (1–3)',      mult: 2.0,  mult2: 4.0,  mult3: 8.0,  check: v => v <= 3 },
+      over:      { label: 'Больше (4–6)',      mult: 2.0,  mult2: 4.0,  mult3: 8.0,  check: v => v >= 4 },
+      '1':       { label: 'Точно 1',           mult: 6.0,  mult2: 36.0, mult3: 216.0, check: v => v === 1 },
+      '2':       { label: 'Точно 2',           mult: 6.0,  mult2: 36.0, mult3: 216.0, check: v => v === 2 },
+      '3':       { label: 'Точно 3',           mult: 6.0,  mult2: 36.0, mult3: 216.0, check: v => v === 3 },
+      '4':       { label: 'Точно 4',           mult: 6.0,  mult2: 36.0, mult3: 216.0, check: v => v === 4 },
+      '5':       { label: 'Точно 5',           mult: 6.0,  mult2: 36.0, mult3: 216.0, check: v => v === 5 },
+      '6':       { label: 'Точно 6',           mult: 6.0,  mult2: 36.0, mult3: 216.0, check: v => v === 6 },
+      ladder:    { label: 'Лесенка',           mult: 2.2,  mult2: 2.4,  mult3: 10.8, checkMulti: vals => vals.length === 1 ? vals[0] >= 4 : vals.every((v, i) => i === 0 || v > vals[i - 1]) },
+      d1gt2:     { label: 'Куб 1 > 2',         mult: 2.4,  minThrows: 2, checkMulti: vals => vals[0] > vals[1] },
+      d1lt2:     { label: 'Куб 1 < 2',         mult: 2.4,  minThrows: 2, checkMulti: vals => vals[0] < vals[1] },
+      double:    { label: 'Любой дубль',       mult: 6.0,  minThrows: 2, checkMulti: vals => vals[0] === vals[1] },
+      sum:       { label: 'Сумма',             mult: 12.0, mult3: 54.0, minThrows: 2, evalMulti: vals => {
+        const s = vals.reduce((a, b) => a + b, 0);
+        if (vals.length === 2) {
+          const m = { 2: 12, 12: 12, 3: 10, 11: 10, 4: 8, 10: 8, 5: 6, 9: 6, 6: 4, 8: 4, 7: 3 };
+          return s >= 10 || s <= 4 ? { isWin: true, mult: m[s] || 6 } : { isWin: false, mult: 0 };
+        }
+        return s >= 15 || s <= 6 ? { isWin: true, mult: s === 3 || s === 18 ? 54 : 18 } : { isWin: false, mult: 0 };
+      }},
+      diff:      { label: 'Разница',           mult: 18.0, minThrows: 2, evalMulti: vals => {
+        const d = Math.abs(vals[0] - vals[1]);
+        const m = { 5: 18, 4: 9, 3: 6 };
+        return m[d] ? { isWin: true, mult: m[d] } : { isWin: false, mult: 0 };
+      }},
+      prod_gt18: { label: 'Произвед > 18',     mult: 4.5,  minThrows: 2, checkMulti: vals => (vals[0] * vals[1]) > 18 },
+      desc:      { label: 'Убывание',          mult: 10.8, minThrows: 3, checkMulti: vals => vals[0] > vals[1] && vals[1] > vals[2] },
+      asc:       { label: 'Возрастание',       mult: 10.8, minThrows: 3, checkMulti: vals => vals[0] < vals[1] && vals[1] < vals[2] },
+      triple:    { label: 'Любой трипл',       mult: 36.0, minThrows: 3, checkMulti: vals => vals[0] === vals[1] && vals[1] === vals[2] },
+      duel:      { label: 'Дуэль',             mult: 3.92, minThrows: 3, checkMulti: vals => vals[0] > vals[1] && vals[0] > vals[2] },
+      straight:  { label: 'Стрит',             mult: 9.0,  minThrows: 3, checkMulti: vals => { const s = [...vals].sort((a, b) => a - b); return s[1] === s[0] + 1 && s[2] === s[1] + 1; } },
+      prod_gt108:{ label: 'Произвед > 108',    mult: 12.7, minThrows: 3, checkMulti: vals => (vals[0] * vals[1] * vals[2]) > 108 },
     }
   },
   football: {
@@ -5289,13 +5259,73 @@ const GAME_CONFIG = {
     name: 'Футбол',
     maxVal: 5,
     outcomes: {
-      miss:       { label: 'Мимо (1–2)',      mult: 2.40, check: v => v <= 2 },
-      goal:       { label: 'Гол ⚽ (3–5)',     mult: 1.65, check: v => v >= 3 },
-      top_corner: { label: 'В девятку 🔥 (5)', mult: 4.60, check: v => v === 5 },
-      post:       { label: 'Штанга (2)',      mult: 4.60, check: v => v === 2 },
-      mid_goal:   { label: 'По центру (3–4)', mult: 2.40, check: v => v >= 3 && v <= 4 },
-      even:       { label: 'Чёт (2,4)',       mult: 2.40, check: v => v % 2 === 0 },
-      odd:        { label: 'Нечёт (1,3,5)',   mult: 1.65, check: v => v % 2 !== 0 },
+      goal_center:      { label: 'Гол в центр',     mult: 5.0,  mult2: 25.0, check: v => v === 3 },
+      goal_corner:      { label: 'Гол в угол',      mult: 5.0,  mult2: 25.0, check: v => v === 4 },
+      goal_post:        { label: 'Гол от штанги',   mult: 5.0,  mult2: 25.0, check: v => v === 5 },
+      goal:             { label: 'Любой гол',       mult: 1.66, mult2: 2.77, check: v => v >= 3 },
+      post:             { label: 'Удар об штангу',  mult: 2.5,  mult2: 6.25, check: v => v <= 2 },
+      miss:             { label: 'Промах',          mult: 2.5,  mult2: 6.25, check: v => v <= 2 },
+      double:           { label: 'Любой дубль',     mult: 5.0,  minThrows: 2, checkMulti: vals => vals[0] === vals[1] },
+      goal_miss:        { label: 'Гол-Промах',      mult: 4.16, minThrows: 2, checkMulti: vals => vals[0] >= 3 && vals[1] <= 2 },
+      miss_goal:        { label: 'Промах-Гол',      mult: 4.16, minThrows: 2, checkMulti: vals => vals[0] <= 2 && vals[1] >= 3 },
+      one_goal_one_miss:{ label: '1 Гол и 1 Промах',mult: 2.08, minThrows: 2, checkMulti: vals => (vals[0] >= 3 && vals[1] <= 2) || (vals[0] <= 2 && vals[1] >= 3) },
+    }
+  },
+  basketball: {
+    emoji: '🏀',
+    name: 'Баскетбол',
+    maxVal: 5,
+    outcomes: {
+      swish:            { label: 'Чистый гол',      mult: 5.0,  mult2: 25.0, check: v => v === 5 },
+      spin:             { label: 'Прокрут',         mult: 2.5,  mult2: 6.25, check: v => v === 2 || v === 3 },
+      stuck:            { label: 'Застрял мяч',     mult: 5.0,  mult2: 25.0, check: v => v === 3 },
+      goal:             { label: 'Любой гол',       mult: 2.5,  mult2: 6.25, check: v => v >= 4 },
+      bounce:           { label: 'Отскок',          mult: 5.0,  mult2: 25.0, check: v => v === 1 },
+      miss:             { label: 'Промах',          mult: 1.66, mult2: 2.77, check: v => v <= 3 },
+      double:           { label: 'Любой дубль',     mult: 5.0,  minThrows: 2, checkMulti: vals => vals[0] === vals[1] },
+      goal_miss:        { label: 'Гол-Промах',      mult: 4.16, minThrows: 2, checkMulti: vals => vals[0] >= 4 && vals[1] <= 3 },
+      miss_goal:        { label: 'Промах-Гол',      mult: 4.16, minThrows: 2, checkMulti: vals => vals[0] <= 3 && vals[1] >= 4 },
+      one_goal_one_miss:{ label: '1 Гол и 1 Промах',mult: 2.08, minThrows: 2, checkMulti: vals => (vals[0] >= 4 && vals[1] <= 3) || (vals[0] <= 3 && vals[1] >= 4) },
+    }
+  },
+  darts: {
+    emoji: '🎯',
+    name: 'Дартс',
+    maxVal: 6,
+    outcomes: {
+      bullseye:       { label: 'Центр',            mult: 6.0,  mult2: 36.0, check: v => v === 6 },
+      red_sector:     { label: 'Сектор (красн.)',  mult: 3.0,  mult2: 9.0,  check: v => v === 2 || v === 4 },
+      bounce:         { label: 'Отскок',           mult: 6.0,  mult2: 36.0, check: v => v === 1 },
+      white_sector:   { label: 'Сектор (бел.)',    mult: 3.0,  mult2: 9.0,  check: v => v === 3 || v === 5 },
+      any_sector:     { label: 'Любой сектор',     mult: 1.5,  mult2: 2.25, check: v => v >= 2 && v <= 5 },
+      red_or_center:  { label: 'Сектор или Центр', mult: 2.0,  mult2: 4.0,  check: v => v === 2 || v === 4 || v === 6 },
+      white_or_bounce:{ label: 'Сектор или Отскок',mult: 2.0,  mult2: 4.0,  check: v => v === 1 || v === 3 || v === 5 },
+      near:           { label: 'Рядом',            mult: 4.5,  minThrows: 2, checkMulti: vals => Math.abs(vals[0] - vals[1]) === 1 && vals[0] >= 2 && vals[1] >= 2 },
+      double:         { label: 'Любой дубль',      mult: 6.0,  minThrows: 2, checkMulti: vals => vals[0] === vals[1] },
+      duel:           { label: 'Дуэль',            mult: 2.4,  minThrows: 2, checkMulti: vals => vals[0] > vals[1] },
+      traffic_light:  { label: 'Светофор',         mult: 3.0,  minThrows: 2, checkMulti: vals => (vals[0] <= 2 && vals[1] >= 5) || (vals[1] <= 2 && vals[0] >= 5) },
+    }
+  },
+  bowling: {
+    emoji: '🎳',
+    name: 'Боулинг',
+    maxVal: 6,
+    outcomes: {
+      strike:    { label: 'Страйк',       mult: 6.0,  mult2: 36.0, check: v => v === 6 },
+      miss:      { label: 'Промах',       mult: 6.0,  mult2: 36.0, check: v => v === 1 },
+      pins1:     { label: 'Сбито 1 / 6',  mult: 6.0,  mult2: 36.0, check: v => v === 2 },
+      pins3:     { label: 'Сбито 3 / 6',  mult: 6.0,  mult2: 36.0, check: v => v === 3 },
+      pins4:     { label: 'Сбито 4 / 6',  mult: 6.0,  mult2: 36.0, check: v => v === 4 },
+      pins5:     { label: 'Сбито 5 / 6',  mult: 6.0,  mult2: 36.0, check: v => v === 5 },
+      no_strike: { label: 'Без страйка',  mult: 1.44, minThrows: 2, checkMulti: vals => vals[0] < 6 && vals[1] < 6 },
+      no_miss:   { label: 'Без промаха',  mult: 1.44, minThrows: 2, checkMulti: vals => vals[0] > 1 && vals[1] > 1 },
+      double:    { label: 'Любой дубль',  mult: 6.0,  minThrows: 2, checkMulti: vals => vals[0] === vals[1] },
+      b1gt2:     { label: '1 > 2',        mult: 2.4,  minThrows: 2, checkMulti: vals => vals[0] > vals[1] },
+      b1lt2:     { label: '1 < 2',        mult: 2.4,  minThrows: 2, checkMulti: vals => vals[0] < vals[1] },
+      sum:       { label: 'Сумма сбитых', mult: 9.0,  minThrows: 2, evalMulti: vals => {
+        const s = vals[0] + vals[1];
+        return s >= 10 ? { isWin: true, mult: s === 12 ? 9.0 : 4.5 } : { isWin: false, mult: 0 };
+      }},
     }
   },
   slots: {
@@ -5303,11 +5333,23 @@ const GAME_CONFIG = {
     name: 'Слоты',
     maxVal: 64,
     outcomes: {
-      spin: {
-        label: 'Вращение барабана',
-        mult: 1.0,
-        check: v => v === 64 || [1, 22, 43].includes(v) || (v % 16 === 0 || v % 17 === 0)
-      }
+      three_sevens:  { label: '3 Семёрки',          mult: 64.0, check: v => v === 64 },
+      three_lemons:  { label: '3 Лимона',           mult: 64.0, check: v => v === 43 },
+      three_grapes:  { label: '3 Винограда',        mult: 64.0, check: v => v === 22 },
+      three_bars:    { label: '3 Бара',             mult: 64.0, check: v => v === 1 },
+      any_combo:     { label: 'Любая комбинация',   mult: 16.0, check: v => [1, 22, 43, 64].includes(v) },
+      unique:        { label: 'Уникальные символы', mult: 2.66, mult2: 7.11, check: v => {
+        const r1 = (v - 1) & 3, r2 = ((v - 1) >> 2) & 3, r3 = ((v - 1) >> 4) & 3;
+        return r1 !== r2 && r2 !== r3 && r1 !== r3;
+      }},
+      exact:         { label: 'Точный исход',       mult: 7.11, check: v => {
+        const r1 = (v - 1) & 3, r2 = ((v - 1) >> 2) & 3, r3 = ((v - 1) >> 4) & 3;
+        return (r1 === r2 && r2 !== r3) || (r1 === r3 && r1 !== r2) || (r2 === r3 && r1 !== r2);
+      }},
+      duel:          { label: 'Дуэль',              mult: 5.05, minThrows: 2, checkMulti: vals => vals[0] > vals[1] && [1, 22, 43, 64].includes(vals[0]) ? true : (vals[0] === 64 || vals[1] === 64) },
+      combo:         { label: 'Комбо',              mult: 400.0, minThrows: 2, checkMulti: vals => vals[0] === 64 && [1, 22, 43, 64].includes(vals[1]) },
+      one_two_combo: { label: '1-2 Любые комбинации', mult: 8.25, minThrows: 2, checkMulti: vals => [1, 22, 43, 64].includes(vals[0]) || [1, 22, 43, 64].includes(vals[1]) },
+      two_combos:    { label: '2 Любые комбинации', mult: 256.0, minThrows: 2, checkMulti: vals => [1, 22, 43, 64].includes(vals[0]) && [1, 22, 43, 64].includes(vals[1]) },
     }
   }
 };
