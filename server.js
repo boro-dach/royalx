@@ -809,7 +809,8 @@ class DatabaseManager {
           moderators: Array.isArray(parsed.moderators) ? parsed.moderators : [],
           agents: Array.isArray(parsed.agents) ? parsed.agents : [],
           proofs: Array.isArray(parsed.proofs) ? parsed.proofs : [],
-          promocodes: (parsed.promocodes && typeof parsed.promocodes === 'object') ? parsed.promocodes : {}
+          promocodes: (parsed.promocodes && typeof parsed.promocodes === 'object') ? parsed.promocodes : {},
+          checks: (parsed.checks && typeof parsed.checks === 'object') ? parsed.checks : {}
         };
       }
     } catch (e) {
@@ -830,7 +831,8 @@ class DatabaseManager {
       },
       treasury: 5000.00,
       admins: [...DEFAULT_ADMINS],
-      promocodes: {}
+      promocodes: {},
+      checks: {}
     };
   }
 
@@ -1463,6 +1465,185 @@ class DatabaseManager {
         message: `Промокод ${code} активирован! +$${amt.toFixed(2)} зачислено на баланс!`
       };
     }
+  }
+
+  _hashCheckPassword(password) {
+    return crypto.createHash('sha256').update(String(password || '')).digest('hex');
+  }
+
+  createCheck(userId, { amount, maxUses, password, description }) {
+    if (!this.data.checks) this.data.checks = {};
+    const user = this.getUser(userId);
+    const perUse = parseFloat(Number(amount).toFixed(2));
+    const uses = parseInt(maxUses, 10);
+
+    if (!Number.isFinite(perUse) || perUse < 0.01) {
+      return { success: false, error: 'Минимальная сумма на активацию — $0.01' };
+    }
+    if (!Number.isInteger(uses) || uses < 1 || uses > 10000) {
+      return { success: false, error: 'Количество активаций должно быть от 1 до 10 000' };
+    }
+
+    const totalCost = parseFloat((perUse * uses).toFixed(2));
+    if (!Number.isFinite(totalCost) || totalCost <= 0) {
+      return { success: false, error: 'Некорректная сумма чека' };
+    }
+    if ((user.balance || 0) < totalCost) {
+      return { success: false, error: `Недостаточно средств. Нужно $${totalCost.toFixed(2)}` };
+    }
+
+    let code = '';
+    for (let i = 0; i < 10; i++) {
+      const candidate = 'CHK-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+      if (!this.data.checks[candidate]) {
+        code = candidate;
+        break;
+      }
+    }
+    if (!code) return { success: false, error: 'Не удалось сгенерировать код чека' };
+
+    const cleanPassword = String(password || '').trim();
+    const cleanDesc = String(description || '').trim().slice(0, 120);
+
+    // Deduct totalCost upfront so checks never work on debt
+    user.balance = parseFloat(Math.max(0, (user.balance || 0) - totalCost).toFixed(2));
+    const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    user.history.unshift({
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      type: 'check_create',
+      title: `Чек ${code} (${uses}×$${perUse.toFixed(2)})`,
+      time: `Сегодня, ${dateStr}`,
+      amount: -totalCost,
+      status: 'СОЗДАН'
+    });
+
+    const check = {
+      code,
+      creatorId: String(userId),
+      creatorName: user.name || 'Пользователь',
+      amount: perUse,
+      maxUses: uses,
+      usesLeft: uses,
+      hasPassword: Boolean(cleanPassword),
+      passwordHash: cleanPassword ? this._hashCheckPassword(cleanPassword) : null,
+      description: cleanDesc,
+      usedBy: [],
+      active: true,
+      createdAt: new Date().toISOString()
+    };
+
+    this.data.checks[code] = check;
+    this.save();
+
+    const { passwordHash, ...publicCheck } = check;
+    return {
+      success: true,
+      check: publicCheck,
+      user,
+      message: `Чек ${code} создан на $${totalCost.toFixed(2)}!`
+    };
+  }
+
+  redeemCheck(userId, { code, password }) {
+    if (!this.data.checks) this.data.checks = {};
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const check = this.data.checks[cleanCode];
+
+    if (!check) {
+      return { success: false, error: 'Чек не найден' };
+    }
+    if (!check.active || check.usesLeft <= 0) {
+      return { success: false, error: 'Чек уже полностью использован или отменён' };
+    }
+    if (String(check.creatorId) === String(userId)) {
+      return { success: false, error: 'Нельзя активировать собственный чек' };
+    }
+    if (Array.isArray(check.usedBy) && check.usedBy.includes(String(userId))) {
+      return { success: false, error: 'Вы уже активировали этот чек' };
+    }
+
+    if (check.hasPassword) {
+      const passStr = String(password || '').trim();
+      if (!passStr) {
+        return { success: false, needPassword: true, error: 'Для этого чека требуется пароль' };
+      }
+      const inputHash = Buffer.from(this._hashCheckPassword(passStr));
+      const storedHash = Buffer.from(String(check.passwordHash || ''));
+      if (inputHash.length !== storedHash.length || !crypto.timingSafeEqual(inputHash, storedHash)) {
+        return { success: false, needPassword: true, error: 'Неверный пароль от чека' };
+      }
+    }
+
+    const user = this.getUser(userId);
+    const amt = parseFloat(check.amount) || 0;
+    if (amt <= 0) {
+      return { success: false, error: 'Некорректная сумма чека' };
+    }
+
+    check.usesLeft = Math.max(0, (check.usesLeft || 0) - 1);
+    if (!Array.isArray(check.usedBy)) check.usedBy = [];
+    check.usedBy.push(String(userId));
+    if (check.usesLeft <= 0) {
+      check.active = false;
+    }
+
+    user.balance = parseFloat(((user.balance || 0) + amt).toFixed(2));
+    const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    user.history.unshift({
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      type: 'check_redeem',
+      title: check.description ? `Чек ${cleanCode}: ${check.description}` : `Чек ${cleanCode}`,
+      time: `Сегодня, ${dateStr}`,
+      amount: amt,
+      status: 'ЗАЧИСЛЕНО'
+    });
+
+    this.save();
+    return {
+      success: true,
+      amount: amt,
+      description: check.description || '',
+      creatorName: check.creatorName || '',
+      user,
+      message: `Чек ${cleanCode} активирован! +$${amt.toFixed(2)} зачислено на баланс!`
+    };
+  }
+
+  cancelCheck(userId, code) {
+    if (!this.data.checks) this.data.checks = {};
+    const cleanCode = String(code || '').trim().toUpperCase();
+    const check = this.data.checks[cleanCode];
+    if (!check) return { success: false, error: 'Чек не найден' };
+    if (String(check.creatorId) !== String(userId)) {
+      return { success: false, error: 'Нет прав на отмену этого чека' };
+    }
+    if (!check.active || check.usesLeft <= 0) {
+      return { success: false, error: 'Чек уже неактивен' };
+    }
+
+    const refund = parseFloat((check.amount * check.usesLeft).toFixed(2));
+    check.active = false;
+    check.usesLeft = 0;
+
+    const user = this.getUser(userId);
+    user.balance = parseFloat(((user.balance || 0) + refund).toFixed(2));
+    const dateStr = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+    user.history.unshift({
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      type: 'check_cancel',
+      title: `Возврат чека ${cleanCode}`,
+      time: `Сегодня, ${dateStr}`,
+      amount: refund,
+      status: 'ВОЗВРАТ'
+    });
+
+    this.save();
+    return {
+      success: true,
+      refund,
+      user,
+      message: `Чек отменён, возвращено $${refund.toFixed(2)}`
+    };
   }
 
   getUser(userId, defaultName = 'Пользователь') {
@@ -2516,6 +2697,50 @@ app.post('/api/promocodes/delete', adminMiddleware(db), (req, res) => {
     }
   }
   res.json({ success: true });
+});
+
+// ==========================================
+// CHECKS (VOUCHERS) API
+// ==========================================
+app.post('/api/checks/create', (req, res) => {
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ success: false, error: 'Требуется авторизация' });
+  const { amount, maxUses, password, description } = req.body || {};
+  const result = db.createCheck(userId, { amount, maxUses, password, description });
+  if (result.user) db.syncUserToSupabase(result.user);
+  res.status(result.success ? 200 : 400).json(result);
+});
+
+app.post('/api/checks/redeem', (req, res) => {
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ success: false, error: 'Требуется авторизация' });
+  const { code, password } = req.body || {};
+  if (!code) return res.status(400).json({ success: false, error: 'Укажите код чека' });
+  const result = db.redeemCheck(userId, { code, password });
+  if (result.user) db.syncUserToSupabase(result.user);
+  res.status(result.success ? 200 : 400).json(result);
+});
+
+app.get('/api/checks/my', (req, res) => {
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ success: false, error: 'Требуется авторизация' });
+  const allChecks = Object.values(db.data.checks || {});
+  const myChecks = allChecks
+    .filter(c => String(c.creatorId) === String(userId))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, 30)
+    .map(({ passwordHash, ...rest }) => rest);
+  res.json({ success: true, checks: myChecks });
+});
+
+app.post('/api/checks/cancel', (req, res) => {
+  const userId = req.userId;
+  if (!userId) return res.status(401).json({ success: false, error: 'Требуется авторизация' });
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ success: false, error: 'Укажите код чека' });
+  const result = db.cancelCheck(userId, code);
+  if (result.user) db.syncUserToSupabase(result.user);
+  res.status(result.success ? 200 : 400).json(result);
 });
 
 // Game and Admin Settings API
