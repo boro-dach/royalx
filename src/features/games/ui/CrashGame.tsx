@@ -81,7 +81,7 @@ export default function CrashGame({ onBack }) {
     historyItems
   } = useApp();
 
-  const currentUserId = tgUser?.id || '8281274109';
+  const currentUserId = tgUser?.id || '3982051';
 
   const [betAmount, setBetAmount] = useState(1);
   const [autoCashout, setAutoCashout] = useState(() => {

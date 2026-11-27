@@ -804,7 +804,7 @@ class DatabaseManager {
           },
           treasury: parsed.treasury !== undefined ? parseFloat(parsed.treasury) : 5000.00,
           admins: Array.isArray(parsed.admins) && parsed.admins.length > 0 
-            ? (parsed.admins.includes(SUPERADMIN_ID) ? parsed.admins : [SUPERADMIN_ID, ...parsed.admins])
+            ? (SUPERADMIN_ID && !parsed.admins.includes(SUPERADMIN_ID) ? [SUPERADMIN_ID, ...parsed.admins] : parsed.admins)
             : DEFAULT_ADMINS,
           moderators: Array.isArray(parsed.moderators) ? parsed.moderators : [],
           agents: Array.isArray(parsed.agents) ? parsed.agents : [],

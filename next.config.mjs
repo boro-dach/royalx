@@ -65,7 +65,7 @@ const nextConfig = {
       process.env.NEXT_PUBLIC_SUPERADMIN_ID ||
       process.env.VITE_SUPERADMIN_ID ||
       process.env.SUPERADMIN_ID ||
-      '8281274109',
+      '',
     NEXT_PUBLIC_TRC20_WALLET:
       process.env.NEXT_PUBLIC_TRC20_WALLET ||
       process.env.VITE_TRC20_WALLET ||
